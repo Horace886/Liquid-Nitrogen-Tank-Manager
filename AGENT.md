@@ -1,0 +1,59 @@
+# 液氮罐管理项目代理说明（审阅稿）
+
+## 项目定位
+
+这是一个面向 Windows 的本地液氮罐库存管理工具，使用 Python、Tkinter 和 SQLite，界面与业务文案以中文为主。程序管理液氮罐、冻存盒、盒内孔位、细胞库存、出入库登记、Excel 导入导出及数据库备份恢复。
+
+后续修改应优先保证数据安全、登记可追溯和现有操作习惯，避免为了“更现代”而引入不必要的框架或依赖。
+
+## 代码地图
+
+- `liquid_nitrogen_tank_manager.py`：Tkinter 界面、页面状态、对话框和 Windows 中文输入法兼容逻辑；入口为 `main()`。
+- `liquid_nitrogen_tank_store.py`：SQLite 数据模型、业务规则、查询、库存操作、出入库事件和备份恢复；这是持久化与业务逻辑的权威实现。
+- `liquid_nitrogen_tank_excel.py`：只用标准库读写 `.xlsx`，负责库存、冻存管和出入库工作簿的导入导出。
+- `tests/test_excel_io.py`：核心仓储、登记与 Excel 回归测试，测试数据均放在临时目录。
+- `_event_verification/`：UI 冒烟、性能和专项验证脚本，不属于正式业务数据。
+- `liquid_nitrogen_tank_storage.db`、`backups/` 和项目根目录下的 `.xlsx`：真实或人工验证数据，不得作为自动化测试输出覆盖。
+- `start_liquid_nitrogen_tank_manager.bat`：Windows 双击启动入口。
+
+当前项目没有第三方 Python 依赖。能用标准库和现有实现完成时，不新增依赖、构建系统或抽象层。
+
+## 必须保持的业务规则
+
+- 每个液氮罐默认 4 列 × 5 层，可扩展为第 5 列；盒位使用“列 + 层”的两位编号，例如 `41`。
+- 每个盒内孔位按 1 支冻存管统计。普通入库必须有入库人，日期字段保持现有格式和校验规则。
+- 普通细胞搜索覆盖全部未归档液氮罐；带批量移动或批量清空的高级搜索只作用于当前液氮罐。
+- 离开当前冻存盒页面、切换液氮罐或打开其他冻存盒时，必须清除批量选择和快捷移动等临时状态，不能跨罐泄漏。
+- 只有普通入库和普通出库保存操作人员；清除、快捷移动、撤销移动、信息更正和历史迁入保持匿名。
+- 快捷移动只生成一条“入库（快捷移动）”事件，并保留原入库信息；不要拆成出库和再次入库。
+- 库存导出与正式出入库登记导出保持分离。正式登记只包含日期范围内的普通入库和普通出库。
+- Excel 导入前必须创建数据库备份；Excel 导入导出本身不写入出入库登记。
+- 历史事件必须完整保留。列表继续使用数据库统计和分页读取，不要为了刷新界面重写或一次性加载全部历史。
+- 批量入库、出库、清除和移动应保持原有的原子性：要么全部成功，要么不留下部分结果。
+
+## 修改原则
+
+- 先定位规则属于界面、仓储还是 Excel 层，再在对应模块做最小修改；不要在界面层复制仓储规则。
+- `liquid_nitrogen_tank_manager.py` 前段保留了旧 JSON 仓储兼容代码，但运行界面在 `FreezerManagerApp` 前已将名称重新绑定到 `liquid_nitrogen_tank_store.py` 的 SQLite 实现。修改持久化逻辑时以 SQLite 实现为准。
+- 涉及 Windows 中文输入法、Enter 键、焦点或重绘时，保留“首次 Enter 确认候选词、再次 Enter 执行动作”的行为，并进行 Windows 实机验证。
+- 改变用户可见行为时，同步更新 `README_liquid_nitrogen_tank_manager.md`；不要记录尚未实现的功能。
+- 不直接修改、清空、迁移或删除真实数据库、备份和现有 Excel 文件。验证写操作应使用 `tempfile.TemporaryDirectory()` 或明确的副本。
+- 未经用户明确要求，不删除备份，不批量整理生成物，也不覆盖现有人工导出文件。
+
+## 验证
+
+每次修改至少运行与改动相关的最小检查。核心回归命令：
+
+```powershell
+py -3 -m unittest discover -s tests -v
+```
+
+涉及 Tkinter 页面、冻存盒状态、日期控件或输入法行为时，再运行：
+
+```powershell
+py -3 _event_verification/ui_smoke.py
+```
+
+涉及性能或大批量历史记录时，按需运行 `_event_verification/event_page_perf.py` 或 `_event_verification/large_event_perf.py`。不要用真实数据库做性能造数。
+
+交付前说明改了什么、运行了哪些验证，以及仍需人工确认的 Windows/UI 行为。

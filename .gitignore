@@ -1,0 +1,22 @@
+# Python 自动生成的文件
+__pycache__/
+*.py[cod]
+
+# 本地数据库和备份：不要上传真实库存数据
+*.db
+backups/
+
+# Excel 导入、导出、临时锁定文件：不要上传
+*.xlsx
+*.xls
+*.csv
+~$*
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node.js 依赖
+node_modules/
