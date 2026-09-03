@@ -36,7 +36,7 @@
 - 先定位规则属于界面、仓储还是 Excel 层，再在对应模块做最小修改；不要在界面层复制仓储规则。
 - `liquid_nitrogen_tank_manager.py` 前段保留了旧 JSON 仓储兼容代码，但运行界面在 `FreezerManagerApp` 前已将名称重新绑定到 `liquid_nitrogen_tank_store.py` 的 SQLite 实现。修改持久化逻辑时以 SQLite 实现为准。
 - 涉及 Windows 中文输入法、Enter 键、焦点或重绘时，保留“首次 Enter 确认候选词、再次 Enter 执行动作”的行为，并进行 Windows 实机验证。
-- 改变用户可见行为时，同步更新 `README_liquid_nitrogen_tank_manager.md`；不要记录尚未实现的功能。
+- 改变用户可见行为时，同步更新 `README.md`；不要记录尚未实现的功能。
 - 不直接修改、清空、迁移或删除真实数据库、备份和现有 Excel 文件。验证写操作应使用 `tempfile.TemporaryDirectory()` 或明确的副本。
 - 未经用户明确要求，不删除备份，不批量整理生成物，也不覆盖现有人工导出文件。
 
