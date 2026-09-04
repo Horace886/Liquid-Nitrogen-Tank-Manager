@@ -17,6 +17,9 @@ from tkinter import font as tkfont
 from tkinter import filedialog, ttk
 from typing import Callable
 
+from liquid_nitrogen_tank_i18n import Message, msg, join_text, LanguageState, preference_path, translated, error_message
+import liquid_nitrogen_tank_ui as ui
+
 from liquid_nitrogen_tank_excel import (
     ImportPreview,
     export_cryotube_workbook,
@@ -37,7 +40,7 @@ from liquid_nitrogen_tank_store import (
 )
 
 
-APP_TITLE = "液氮罐管理"
+APP_TITLE = msg('液氮罐管理')
 APP_VERSION = "1.0.0"
 APP_DEVELOPER = "Horace"
 APP_SUPPORT_EMAIL = "1050136527@qq.com"
@@ -995,6 +998,7 @@ class RoundedButton(tk.Canvas):
             takefocus=1,
         )
         self._text = text
+        self._base_width = width
         self._command = command
         self._fill = fill
         self._normal_fill = fill
@@ -1017,6 +1021,15 @@ class RoundedButton(tk.Canvas):
         self.bind("<FocusIn>", self._redraw)
         self.bind("<FocusOut>", self._redraw)
         self.bind("<Destroy>", self._cancel_animation)
+        ui.register(self)
+        self._apply_language()
+
+    def _apply_language(self) -> None:
+        text = ui.display(self, self._text)
+        width = self._base_width
+        if translated(self._text):
+            width = max(width, max(self._font.measure(line) for line in text.splitlines() or ['']) + self._text_padx * 2)
+        self.configure(width=width)
         self._redraw()
 
     def _rounded_rectangle(self, width: int, height: int) -> None:
@@ -1077,7 +1090,7 @@ class RoundedButton(tk.Canvas):
         self.create_text(
             x,
             height / 2,
-            text=self._text,
+            text=ui.display(self, self._text),
             fill=self._foreground,
             font=self._font,
             anchor=text_anchor,
@@ -1113,10 +1126,7 @@ class RoundedButton(tk.Canvas):
                 self._fill = target
             else:
                 progress = 1 - (1 - frame / 6) ** 3
-                self._fill = "#" + "".join(
-                    f"{round((a + (b - a) * progress) / 257):02x}"
-                    for a, b in zip(start, end)
-                )
+                self._fill = "#" + join_text('', (msg('{0}', format(round((a + (b - a) * progress) / 257), msg('02x'))) for a, b in zip(start, end)))
             self.itemconfigure("surface", fill=self._surface_fill())
             if self._fill != target:
                 self._animation_job = self.after(16, lambda: step(frame + 1))
@@ -1141,7 +1151,7 @@ class RoundedButton(tk.Canvas):
 
     def set_text(self, text: str) -> None:
         self._text = text
-        self._redraw()
+        self._apply_language()
 
     def _invoke(self, _event: tk.Event | None = None) -> None:
         if self._invoke_pending:
@@ -1155,7 +1165,7 @@ class RoundedButton(tk.Canvas):
         self._command()
 
 
-class AppDialog(tk.Toplevel):
+class AppDialog(ui.Toplevel):
     """Modal dialog styled to match the main application."""
 
     def __init__(
@@ -1179,7 +1189,7 @@ class AppDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=58)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(
+        ui.Label(
             header,
             text=title,
             bg=COLORS["sidebar"],
@@ -1189,7 +1199,7 @@ class AppDialog(tk.Toplevel):
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=24, pady=20)
-        tk.Label(
+        ui.Label(
             body,
             text=message,
             bg=COLORS["panel"],
@@ -1238,13 +1248,14 @@ class AppDialog(tk.Toplevel):
             else (275 if "\n" in message or len(message) > 90 else 210)
         )
         self.update_idletasks()
+        dialog_height = max(dialog_height, self.winfo_reqheight())
         parent_x = parent.winfo_rootx()
         parent_y = parent.winfo_rooty()
         parent_width = parent.winfo_width()
         parent_height = parent.winfo_height()
         left = parent_x + max(0, (parent_width - width) // 2)
         top = parent_y + max(0, (parent_height - dialog_height) // 2)
-        self.geometry(f"{width}x{dialog_height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, dialog_height, left, top))
         self.grab_set()
         if self.entry is not None:
             self.entry.focus_set()
@@ -1280,13 +1291,13 @@ class AppDialog(tk.Toplevel):
         return self.result
 
 
-class BoxLayoutDialog(tk.Toplevel):
+class BoxLayoutDialog(ui.Toplevel):
     """Row/column picker with a fixed multiplication sign."""
 
     def __init__(self, parent: tk.Misc, rows: int, columns: int):
         super().__init__(parent)
         self.result: tuple[int, int] | None = None
-        self.title("设置盒子布局")
+        self.title(msg('设置盒子布局'))
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
         self.transient(parent)
@@ -1295,11 +1306,11 @@ class BoxLayoutDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=58)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text="设置盒子布局", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
+        ui.Label(header, text=msg('设置盒子布局'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=26, pady=20)
-        tk.Label(body, text="请选择盒子的行数和列数（范围 1–20）", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10), anchor="w").pack(fill="x", pady=(0, 16))
+        ui.Label(body, text=msg('请选择盒子的行数和列数（范围 1–20）'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10), anchor="w").pack(fill="x", pady=(0, 16))
 
         picker = tk.Frame(body, bg=COLORS["panel"])
         picker.pack(fill="x")
@@ -1311,22 +1322,22 @@ class BoxLayoutDialog(tk.Toplevel):
 
         row_box = tk.Frame(picker, bg=COLORS["panel"])
         row_box.grid(row=0, column=0, sticky="ew")
-        tk.Label(row_box, text="行数", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
-        self.rows_picker = ttk.Combobox(row_box, textvariable=self.rows_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
+        ui.Label(row_box, text=msg('行数'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+        self.rows_picker = ui.Combobox(row_box, textvariable=self.rows_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
         self.rows_picker.pack(fill="x")
 
-        tk.Label(picker, text="×", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 18, "bold"), width=3).grid(row=0, column=1, sticky="s", padx=10, pady=(0, 2))
+        ui.Label(picker, text="×", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 18, "bold"), width=3).grid(row=0, column=1, sticky="s", padx=10, pady=(0, 2))
 
         column_box = tk.Frame(picker, bg=COLORS["panel"])
         column_box.grid(row=0, column=2, sticky="ew")
-        tk.Label(column_box, text="列数", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
-        self.columns_picker = ttk.Combobox(column_box, textvariable=self.columns_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
+        ui.Label(column_box, text=msg('列数'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+        self.columns_picker = ui.Combobox(column_box, textvariable=self.columns_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
         self.columns_picker.pack(fill="x")
 
         self.actions = tk.Frame(body, bg=COLORS["panel"])
         self.actions.pack(fill="x", pady=(22, 0))
-        RoundedButton(self.actions, text="确定", command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right")
-        RoundedButton(self.actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(self.actions, text=msg('确定'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right")
+        RoundedButton(self.actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
 
         self.bind("<Return>", lambda _event: self._confirm())
         self.bind("<Escape>", lambda _event: self._cancel())
@@ -1334,7 +1345,7 @@ class BoxLayoutDialog(tk.Toplevel):
         width, height = 450, 258
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
         self.grab_set()
         self.after(80, lambda: self._focus_picker_if_visible())
 
@@ -1370,7 +1381,7 @@ class BoxLayoutDialog(tk.Toplevel):
         return self.result
 
 
-class StorageSpecDialog(tk.Toplevel):
+class StorageSpecDialog(ui.Toplevel):
     """Picker for a tank's column-by-layer specification."""
 
     def __init__(self, parent: tk.Misc, columns: int, layers: int):
@@ -1378,7 +1389,7 @@ class StorageSpecDialog(tk.Toplevel):
         self.result: tuple[int, int] | None = None
         self.current_columns = columns
         self.current_layers = layers
-        self.title("调整液氮罐规格")
+        self.title(msg('调整液氮罐规格'))
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
         self.transient(parent)
@@ -1387,11 +1398,11 @@ class StorageSpecDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=58)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text="调整液氮罐规格", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
+        ui.Label(header, text=msg('调整液氮罐规格'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=26, pady=20)
-        tk.Label(body, text=f"当前规格：{columns}列 × {layers}层（{columns * layers}个冻存盒位）", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10), anchor="w").pack(fill="x", pady=(0, 16))
+        ui.Label(body, text=msg('当前规格：{0}列 × {1}层（{2}个冻存盒位）', columns, layers, columns * layers), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10), anchor="w").pack(fill="x", pady=(0, 16))
 
         picker = tk.Frame(body, bg=COLORS["panel"])
         picker.pack(fill="x")
@@ -1402,27 +1413,27 @@ class StorageSpecDialog(tk.Toplevel):
         self.layers_var = tk.StringVar(value=str(layers))
 
         for grid_column, label, variable in (
-            (0, "列数", self.columns_var),
-            (2, "层数", self.layers_var),
+            (0, msg('列数'), self.columns_var),
+            (2, msg('层数'), self.layers_var),
         ):
             field = tk.Frame(picker, bg=COLORS["panel"])
             field.grid(row=0, column=grid_column, sticky="ew")
-            tk.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
-            picker_widget = ttk.Combobox(field, textvariable=variable, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
+            ui.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            picker_widget = ui.Combobox(field, textvariable=variable, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
             picker_widget.pack(fill="x")
             picker_widget.bind("<<ComboboxSelected>>", self._refresh_preview)
             if grid_column == 0:
                 self.columns_picker = picker_widget
-        tk.Label(picker, text="×", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 18, "bold"), width=3).grid(row=0, column=1, sticky="s", padx=10, pady=(0, 2))
+        ui.Label(picker, text="×", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 18, "bold"), width=3).grid(row=0, column=1, sticky="s", padx=10, pady=(0, 2))
 
-        self.preview_label = tk.Label(body, text="", bg="#F7F9FC", fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w", padx=12, pady=9)
+        self.preview_label = ui.Label(body, text="", bg="#F7F9FC", fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w", padx=12, pady=9)
         self.preview_label.pack(fill="x", pady=(16, 0))
         self._refresh_preview()
 
         actions = tk.Frame(body, bg=COLORS["panel"])
         actions.pack(fill="x", pady=(18, 0))
-        RoundedButton(actions, text="保存规格", command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=104, height=38, radius=10).pack(side="right")
-        RoundedButton(actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(actions, text=msg('保存规格'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=104, height=38, radius=10).pack(side="right")
+        RoundedButton(actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
 
         self.bind("<Return>", lambda _event: self._confirm())
         self.bind("<Escape>", lambda _event: self._cancel())
@@ -1430,7 +1441,7 @@ class StorageSpecDialog(tk.Toplevel):
         width, height = 470, 335
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
         self.grab_set()
         self.after(80, self.columns_picker.focus_set)
 
@@ -1440,8 +1451,8 @@ class StorageSpecDialog(tk.Toplevel):
         old_capacity = self.current_columns * self.current_layers
         new_capacity = columns * layers
         change = new_capacity - old_capacity
-        change_text = "不变" if change == 0 else f"{'增加' if change > 0 else '减少'} {abs(change)} 个"
-        self.preview_label.configure(text=f"新规格：{columns}列 × {layers}层 · {new_capacity}个盒位 · {change_text}")
+        change_text = msg('不变') if change == 0 else msg('{0} {1} 个', msg('增加') if change > 0 else msg('减少'), abs(change))
+        self.preview_label.configure(text=msg('新规格：{0}列 × {1}层 · {2}个盒位 · {3}', columns, layers, new_capacity, change_text))
 
     def _confirm(self) -> None:
         self.result = (int(self.columns_var.get()), int(self.layers_var.get()))
@@ -1468,7 +1479,7 @@ class StorageSpecDialog(tk.Toplevel):
         return self.result
 
 
-class InventoryLocationsDialog(tk.Toplevel):
+class InventoryLocationsDialog(ui.Toplevel):
     """Show every physical box containing one aggregated sample."""
 
     def __init__(self, parent: "FreezerManagerApp", sample_name: str, locations: list[dict[str, object]]):
@@ -1477,7 +1488,7 @@ class InventoryLocationsDialog(tk.Toplevel):
         self.sample_name = sample_name
         self.locations = locations
         self.opened_boxes = parent.inventory_location_opened_boxes
-        self.title("细胞位置明细")
+        self.title(msg('细胞位置明细'))
         self.configure(bg=COLORS["panel"])
         self.minsize(650, 360)
         self.resizable(True, True)
@@ -1489,8 +1500,8 @@ class InventoryLocationsDialog(tk.Toplevel):
         header.pack_propagate(False)
         title_box = tk.Frame(header, bg=COLORS["sidebar"])
         title_box.pack(side="left", padx=22, pady=11)
-        tk.Label(title_box, text=f"细胞位置 · {sample_name}", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w")
-        tk.Label(title_box, text=f"共 {len(locations)} 个盒子", bg=COLORS["sidebar"], fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
+        ui.Label(title_box, text=msg('细胞位置 · {0}', sample_name), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w")
+        ui.Label(title_box, text=msg('共 {0} 个盒子', len(locations)), bg=COLORS["sidebar"], fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
 
         container = tk.Frame(self, bg=COLORS["bg"])
         container.pack(fill="both", expand=True)
@@ -1524,11 +1535,11 @@ class InventoryLocationsDialog(tk.Toplevel):
             info.pack(side="left", fill="both", expand=True, padx=18, pady=14)
             title_row = tk.Frame(info, bg=card_bg)
             title_row.pack(fill="x")
-            tk.Label(title_row, text=f"{location['box_name']}  ·  {location['freezer_name']}", bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"), anchor="w").pack(side="left")
+            ui.Label(title_row, text=msg('{0}  ·  {1}', msg('细胞冻存盒 {0}', code), location['freezer_name']), bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"), anchor="w").pack(side="left")
             if opened:
-                tk.Label(
+                ui.Label(
                     title_row,
-                    text="已查看",
+                    text=msg('已查看'),
                     bg="#E7F0FF",
                     fg=COLORS["primary"],
                     font=("Microsoft YaHei UI", 8, "bold"),
@@ -1537,13 +1548,13 @@ class InventoryLocationsDialog(tk.Toplevel):
                     highlightthickness=1,
                     highlightbackground="#BFD4FF",
                 ).pack(side="left", padx=10)
-            tk.Label(info, text=f"盒位 {code}  ·  孔位：{compact_box_positions(location['positions'])}", bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), anchor="w").pack(fill="x", pady=(5, 0))
-            tk.Label(info, text=f"该盒共 {len(location['positions'])} 支冻存管  ·  占用 {len(location['positions'])} 个孔位", bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w").pack(fill="x", pady=(5, 0))
-            RoundedButton(card, text="再次打开" if opened else "打开盒子", command=lambda fid=freezer_id, value=code, positions=tuple(str(value) for value in location["positions"]): self._open_box(fid, value, positions), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=96, height=36, radius=9).pack(side="right", padx=18, pady=16)
+            ui.Label(info, text=msg('盒位 {0}  ·  孔位：{1}', code, compact_box_positions(location['positions'])), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), anchor="w").pack(fill="x", pady=(5, 0))
+            ui.Label(info, text=msg('该盒共 {0} 支冻存管  ·  占用 {1} 个孔位', len(location['positions']), len(location['positions'])), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w").pack(fill="x", pady=(5, 0))
+            RoundedButton(card, text=msg('再次打开') if opened else msg('打开盒子'), command=lambda fid=freezer_id, value=code, positions=tuple(str(value) for value in location["positions"]): self._open_box(fid, value, positions), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=96, height=36, radius=9).pack(side="right", padx=18, pady=16)
 
         footer = tk.Frame(self, bg=COLORS["panel"])
         footer.pack(fill="x")
-        RoundedButton(footer, text="关闭", command=self._close, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=18, pady=12)
+        RoundedButton(footer, text=msg('关闭'), command=self._close, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=18, pady=12)
 
         self.bind("<Escape>", lambda _event: self._close())
         self.update_idletasks()
@@ -1551,7 +1562,7 @@ class InventoryLocationsDialog(tk.Toplevel):
         height = min(620, max(400, parent.winfo_height() - 120))
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
         self.grab_set()
 
     def _on_mousewheel(self, event: tk.Event) -> str:
@@ -1588,7 +1599,7 @@ class InventoryLocationsDialog(tk.Toplevel):
         self.wait_window()
 
 
-class BoxMoveDialog(tk.Toplevel):
+class BoxMoveDialog(ui.Toplevel):
     """Visually select a target tank and exact empty box positions."""
 
     def __init__(self, parent: "FreezerManagerApp", source_codes: list[str]):
@@ -1604,7 +1615,7 @@ class BoxMoveDialog(tk.Toplevel):
         self.freezer_ids = [item[0] for item in self.freezer_items]
         self.freezer_names = [item[1] for item in self.freezer_items]
 
-        self.title("可视化批量移动")
+        self.title(msg('可视化批量移动'))
         self.configure(bg=COLORS["bg"])
         self.minsize(720, 580)
         self.resizable(True, True)
@@ -1616,25 +1627,25 @@ class BoxMoveDialog(tk.Toplevel):
         header.pack_propagate(False)
         header_text = tk.Frame(header, bg=COLORS["sidebar"])
         header_text.pack(side="left", padx=24, pady=11)
-        tk.Label(header_text, text="选择移动目标", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
-        tk.Label(header_text, text=f"源冻存盒：{'、'.join(self.source_codes)}", bg=COLORS["sidebar"], fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
+        ui.Label(header_text, text=msg('选择移动目标'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
+        ui.Label(header_text, text=msg('源冻存盒：{0}', join_text('、', self.source_codes)), bg=COLORS["sidebar"], fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
 
         controls = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
         controls.pack(fill="x", padx=20, pady=(18, 12))
-        tk.Label(controls, text="目标液氮罐", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(18, 10), pady=13)
+        ui.Label(controls, text=msg('目标液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(18, 10), pady=13)
         self.freezer_var = tk.StringVar(value=self.repository.freezer_name)
-        self.freezer_picker = ttk.Combobox(controls, textvariable=self.freezer_var, values=self.freezer_names, state="readonly", font=("Microsoft YaHei UI", 9), width=25)
+        self.freezer_picker = ui.Combobox(controls, textvariable=self.freezer_var, values=self.freezer_names, state="readonly", font=("Microsoft YaHei UI", 9), width=25)
         self.freezer_picker.pack(side="left", pady=12)
         self.freezer_picker.bind("<<ComboboxSelected>>", self._change_freezer)
-        self.selection_label = tk.Label(controls, text="", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"))
+        self.selection_label = ui.Label(controls, text="", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"))
         self.selection_label.pack(side="right", padx=18)
 
         grid_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
         grid_panel.pack(fill="both", expand=True, padx=20, pady=(0, 12))
         grid_head = tk.Frame(grid_panel, bg=COLORS["panel"])
         grid_head.pack(fill="x", padx=18, pady=(13, 7))
-        tk.Label(grid_head, text="点击空盒位作为目标", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
-        tk.Label(grid_head, text="绿色可选 · 灰色已占用", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
+        ui.Label(grid_head, text=msg('点击空盒位作为目标'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(grid_head, text=msg('绿色可选 · 灰色已占用'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
         self.grid_scroller = ScrollableFrame(grid_panel, horizontal=True)
         self.grid_scroller.pack(fill="both", expand=True, padx=16, pady=(0, 16))
         self.grid = tk.Frame(self.grid_scroller.body, bg=COLORS["panel"])
@@ -1642,9 +1653,9 @@ class BoxMoveDialog(tk.Toplevel):
 
         footer = tk.Frame(self, bg=COLORS["panel"])
         footer.pack(fill="x")
-        self.confirm_button = RoundedButton(footer, text="确认移动", command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=106, height=40, radius=10)
+        self.confirm_button = RoundedButton(footer, text=msg('确认移动'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=106, height=40, radius=10)
         self.confirm_button.pack(side="right", padx=(8, 20), pady=12)
-        RoundedButton(footer, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=40, radius=10).pack(side="right", pady=12)
+        RoundedButton(footer, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=40, radius=10).pack(side="right", pady=12)
 
         self.bind("<Escape>", lambda _event: self._cancel())
         self.bind("<Return>", lambda _event: self._confirm())
@@ -1654,7 +1665,7 @@ class BoxMoveDialog(tk.Toplevel):
         height = min(700, max(600, parent.winfo_height() - 80))
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
         self.grab_set()
 
     def _target_freezer_id(self) -> str:
@@ -1682,18 +1693,18 @@ class BoxMoveDialog(tk.Toplevel):
             self.grid.columnconfigure(column, weight=1 if column else 0, uniform="move-target")
         for row in range(layers + 1):
             self.grid.rowconfigure(row, weight=1 if row else 0)
-        tk.Label(self.grid, text="层 / 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
+        ui.Label(self.grid, text=msg('层 / 列'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
         for column in range(1, columns + 1):
-            tk.Label(self.grid, text=f"第 {column} 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
+            ui.Label(self.grid, text=msg('第 {0} 列', column), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
         for layer in range(1, layers + 1):
-            tk.Label(self.grid, text=f"第 {layer} 层", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
+            ui.Label(self.grid, text=msg('第 {0} 层', layer), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
             for column in range(1, columns + 1):
                 code = compartment_code(column, layer)
                 empty = self.repository.box_position_is_empty(target_id, code)
                 if empty:
                     button = RoundedButton(
                         self.grid,
-                        text=f"{code}\n空盒位",
+                        text=msg('{0}\n空盒位', code),
                         command=lambda value=code: self._toggle_target(value),
                         fill="#F1F8F5",
                         foreground=COLORS["occupied_text"],
@@ -1708,7 +1719,7 @@ class BoxMoveDialog(tk.Toplevel):
                     self.target_buttons[code] = button
                     button.grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
                 else:
-                    tk.Label(self.grid, text=f"{code}\n已占用", bg="#EEF2F7", fg="#A0A9B7", font=("Microsoft YaHei UI", 9, "bold"), highlightthickness=1, highlightbackground=COLORS["line"], padx=8, pady=10).grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
+                    ui.Label(self.grid, text=msg('{0}\n已占用', code), bg="#EEF2F7", fg="#A0A9B7", font=("Microsoft YaHei UI", 9, "bold"), highlightthickness=1, highlightbackground=COLORS["line"], padx=8, pady=10).grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
         self._refresh_selection_status()
 
     def _toggle_target(self, code: str) -> None:
@@ -1719,11 +1730,11 @@ class BoxMoveDialog(tk.Toplevel):
         self._refresh_selection_status()
 
     def _refresh_selection_status(self) -> None:
-        self.selection_label.configure(text=f"已选 {len(self.selected_targets)} / {self.required_count} 个目标盒位")
+        self.selection_label.configure(text=msg('已选 {0} / {1} 个目标盒位', len(self.selected_targets), self.required_count))
         for code, button in self.target_buttons.items():
             selected = code in self.selected_targets
             order = self.selected_targets.index(code) + 1 if selected else 0
-            button.set_text(f"✓ {code}\n目标 {order}" if selected else f"{code}\n空盒位")
+            button.set_text(msg('✓ {0}\n目标 {1}', code, order) if selected else msg('{0}\n空盒位', code))
             button.set_palette(
                 fill=COLORS["primary"] if selected else "#F1F8F5",
                 foreground="white" if selected else COLORS["occupied_text"],
@@ -1733,7 +1744,7 @@ class BoxMoveDialog(tk.Toplevel):
 
     def _confirm(self) -> None:
         if len(self.selected_targets) != self.required_count:
-            self.selection_label.configure(text=f"还需选择 {self.required_count - len(self.selected_targets)} 个目标盒位", fg=COLORS["danger"])
+            self.selection_label.configure(text=msg('还需选择 {0} 个目标盒位', self.required_count - len(self.selected_targets)), fg=COLORS["danger"])
             return
         self.result = (self._target_freezer_id(), list(self.selected_targets))
         self._close()
@@ -1754,13 +1765,13 @@ class BoxMoveDialog(tk.Toplevel):
         return self.result
 
 
-class InventoryAlertDialog(tk.Toplevel):
+class InventoryAlertDialog(ui.Toplevel):
     """Edit the low-stock thresholds for one aggregated cell inventory item."""
 
     def __init__(self, parent: tk.Misc, sample_name: str, low_threshold: int, warning_threshold: int):
         super().__init__(parent)
         self.result: tuple[int, int] | None = None
-        self.title("库存预警设置")
+        self.title(msg('库存预警设置'))
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
         self.transient(parent)
@@ -1769,12 +1780,12 @@ class InventoryAlertDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=62)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text="库存预警设置", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=17)
+        ui.Label(header, text=msg('库存预警设置'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=17)
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=24, pady=20)
-        tk.Label(body, text=sample_name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
-        tk.Label(body, text="库存按已占用孔位（冻存管数）计算。", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(anchor="w", pady=(4, 16))
+        ui.Label(body, text=sample_name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
+        ui.Label(body, text=msg('库存按已占用孔位（冻存管数）计算。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(anchor="w", pady=(4, 16))
 
         form = tk.Frame(body, bg=COLORS["panel"])
         form.pack(fill="x")
@@ -1782,22 +1793,22 @@ class InventoryAlertDialog(tk.Toplevel):
         self.low_var = tk.StringVar(value=str(low_threshold))
         self.warning_var = tk.StringVar(value=str(warning_threshold))
         for column, (label, variable, hint) in enumerate((
-            ("最低库存", self.low_var, "≤ 此值显示红色"),
-            ("提醒库存", self.warning_var, "≤ 此值显示橙色"),
+            (msg('最低库存'), self.low_var, msg('≤ 此值显示红色')),
+            (msg('提醒库存'), self.warning_var, msg('≤ 此值显示橙色')),
         )):
             field = tk.Frame(form, bg=COLORS["panel"])
             field.grid(row=0, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0))
-            tk.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
+            ui.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
             entry = ttk.Entry(field, textvariable=variable, font=("Microsoft YaHei UI", 10))
             entry.pack(fill="x", pady=(6, 4), ipady=3)
-            tk.Label(field, text=hint, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
+            ui.Label(field, text=hint, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
 
-        self.error_label = tk.Label(body, text="", bg=COLORS["panel"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 8))
+        self.error_label = ui.Label(body, text="", bg=COLORS["panel"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 8))
         self.error_label.pack(anchor="w", pady=(12, 0))
         actions = tk.Frame(body, bg=COLORS["panel"])
         actions.pack(fill="x", pady=(8, 0))
-        RoundedButton(actions, text="保存", command=self._save, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right")
-        RoundedButton(actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=(0, 8))
+        RoundedButton(actions, text=msg('保存'), command=self._save, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right")
+        RoundedButton(actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _event: self._cancel())
         self.bind("<Return>", lambda _event: self._save())
@@ -1807,7 +1818,7 @@ class InventoryAlertDialog(tk.Toplevel):
         width, height = 480, max(380, self.winfo_reqheight() + 28)
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
         self.grab_set()
 
     def _save(self) -> None:
@@ -1815,13 +1826,13 @@ class InventoryAlertDialog(tk.Toplevel):
             low = int(self.low_var.get().strip())
             warning = int(self.warning_var.get().strip())
         except ValueError:
-            self.error_label.configure(text="最低库存和提醒库存必须填写整数。")
+            self.error_label.configure(text=msg('最低库存和提醒库存必须填写整数。'))
             return
         if low < 0 or warning < 0:
-            self.error_label.configure(text="预警值不能小于 0。")
+            self.error_label.configure(text=msg('预警值不能小于 0。'))
             return
         if warning < low:
-            self.error_label.configure(text="提醒库存不能小于最低库存。")
+            self.error_label.configure(text=msg('提醒库存不能小于最低库存。'))
             return
         self.result = (low, warning)
         self._close()
@@ -1867,7 +1878,7 @@ class MultiSelectDropdown(tk.Frame):
             key: tk.BooleanVar(value=key in self.selected)
             for key in self.options
         }
-        self.button = ttk.Button(
+        self.button = ui.TtkButton(
             self,
             textvariable=self.textvariable,
             command=self._open,
@@ -1878,15 +1889,15 @@ class MultiSelectDropdown(tk.Frame):
 
     def _update_text(self) -> None:
         if self.selected == set(self.options):
-            label = "全部操作"
+            label = msg('全部操作')
         elif not self.selected:
-            label = "未选择操作"
+            label = msg('未选择操作')
         elif len(self.selected) == 1:
             key = next(iter(self.selected))
             label = self.options.get(key, key)
         else:
-            label = f"已选 {len(self.selected)} 项"
-        self.textvariable.set(f"{label}  ▾")
+            label = msg('已选 {0} 项', len(self.selected))
+        self.textvariable.set(msg('{0}  ▾', label))
 
     def _open(self) -> None:
         if self.panel is not None and self.panel.winfo_exists():
@@ -1903,15 +1914,15 @@ class MultiSelectDropdown(tk.Frame):
             highlightbackground=COLORS["line"],
         )
         self.panel = body
-        tk.Label(
+        ui.Label(
             body,
-            text="可勾选多个操作类型",
+            text=msg('可勾选多个操作类型'),
             bg=COLORS["panel"],
             fg=COLORS["text"],
             font=("Microsoft YaHei UI", 9, "bold"),
         ).pack(anchor="w", padx=12, pady=(10, 5))
         for key, label in self.options.items():
-            tk.Checkbutton(
+            ui.Checkbutton(
                 body,
                 text=label,
                 variable=self.variables[key],
@@ -1929,23 +1940,23 @@ class MultiSelectDropdown(tk.Frame):
 
         actions = tk.Frame(body, bg=COLORS["panel"])
         actions.pack(fill="x", padx=10, pady=(7, 10))
-        ttk.Button(
+        ui.TtkButton(
             actions,
-            text="全选",
+            text=msg('全选'),
             command=lambda: self._set_all(True),
             style="Secondary.TButton",
             width=6,
         ).pack(side="left")
-        ttk.Button(
+        ui.TtkButton(
             actions,
-            text="清空",
+            text=msg('清空'),
             command=lambda: self._set_all(False),
             style="Secondary.TButton",
             width=6,
         ).pack(side="left", padx=6)
-        ttk.Button(
+        ui.TtkButton(
             actions,
-            text="完成",
+            text=msg('完成'),
             command=self._close,
             style="Primary.TButton",
             width=6,
@@ -1989,7 +2000,7 @@ class MultiSelectDropdown(tk.Frame):
 class DatePickerField(tk.Frame):
     """Editable YYYY-MM-DD field with an independent floating calendar."""
 
-    WEEKDAYS = ("一", "二", "三", "四", "五", "六", "日")
+    WEEKDAYS = (msg('一'), msg('二'), msg('三'), msg('四'), msg('五'), msg('六'), msg('日'))
 
     def __init__(
         self,
@@ -2008,9 +2019,9 @@ class DatePickerField(tk.Frame):
         self.entry.pack(side="left", fill="x", expand=True, ipady=3)
         if on_return is not None:
             _bind_ime_safe_return(self.entry, on_return)
-        self.calendar_button = ttk.Button(
+        self.calendar_button = ui.TtkButton(
             self,
-            text="日期",
+            text=msg('日期'),
             command=self.open_calendar,
             style="Secondary.TButton",
             width=5,
@@ -2041,7 +2052,7 @@ class DatePickerField(tk.Frame):
         selected = self._parsed_date(self.variable.get()) or date.today()
         self.calendar_year = selected.year
         self.calendar_month = selected.month
-        panel = tk.Toplevel(
+        panel = ui.Toplevel(
             root,
             bg=COLORS["panel"],
             highlightthickness=1,
@@ -2076,7 +2087,7 @@ class DatePickerField(tk.Frame):
         else:
             y = max(screen_top + 8, field_top - panel_height - 3)
         panel.minsize(panel_width, panel_height)
-        panel.geometry(f"{panel_width}x{panel_height}+{x}+{y}")
+        panel.geometry(msg('{0}x{1}+{2}+{3}', panel_width, panel_height, x, y))
         panel.deiconify()
         try:
             panel.lift(self.winfo_toplevel())
@@ -2091,21 +2102,21 @@ class DatePickerField(tk.Frame):
             child.destroy()
         header = tk.Frame(panel, bg=COLORS["panel"])
         header.pack(fill="x", padx=8, pady=(8, 4))
-        ttk.Button(header, text="‹", command=lambda: self._change_month(-1), style="Secondary.TButton", width=3).pack(side="left")
-        tk.Label(
+        ui.TtkButton(header, text="‹", command=lambda: self._change_month(-1), style="Secondary.TButton", width=3).pack(side="left")
+        ui.Label(
             header,
-            text=f"{self.calendar_year} 年 {self.calendar_month} 月",
+            text=msg('{0} 年 {1} 月', self.calendar_year, self.calendar_month),
             bg=COLORS["panel"],
             fg=COLORS["text"],
             font=("Microsoft YaHei UI", 10, "bold"),
         ).pack(side="left", fill="x", expand=True)
-        ttk.Button(header, text="›", command=lambda: self._change_month(1), style="Secondary.TButton", width=3).pack(side="right")
+        ui.TtkButton(header, text="›", command=lambda: self._change_month(1), style="Secondary.TButton", width=3).pack(side="right")
 
         grid = tk.Frame(panel, bg=COLORS["panel"])
         grid.pack(fill="x", padx=8)
         for column, weekday in enumerate(self.WEEKDAYS):
             grid.columnconfigure(column, weight=1, uniform="calendar_day")
-            tk.Label(
+            ui.Label(
                 grid,
                 text=weekday,
                 bg=COLORS["panel"],
@@ -2118,14 +2129,14 @@ class DatePickerField(tk.Frame):
         for row_index, week in enumerate(weeks, 1):
             for column, day_number in enumerate(week):
                 if day_number == 0:
-                    tk.Label(grid, text="", bg=COLORS["panel"]).grid(row=row_index, column=column, sticky="nsew", padx=1, pady=1)
+                    ui.Label(grid, text="", bg=COLORS["panel"]).grid(row=row_index, column=column, sticky="nsew", padx=1, pady=1)
                     continue
                 candidate = date(self.calendar_year, self.calendar_month, day_number)
                 is_selected = candidate == selected
                 is_today = candidate == today
                 background = COLORS["primary"] if is_selected else (COLORS["primary_soft"] if is_today else COLORS["panel"])
                 foreground = "white" if is_selected else (COLORS["primary"] if is_today else COLORS["text"])
-                tk.Button(
+                ui.Button(
                     grid,
                     text=str(day_number),
                     command=lambda value=candidate: self._select_date(value),
@@ -2140,8 +2151,8 @@ class DatePickerField(tk.Frame):
                 ).grid(row=row_index, column=column, sticky="nsew", padx=1, pady=1, ipady=3)
         footer = tk.Frame(panel, bg=COLORS["panel"])
         footer.pack(fill="x", padx=8, pady=(6, 8))
-        ttk.Button(footer, text="今天", command=lambda: self._select_date(date.today()), style="Secondary.TButton", width=7).pack(side="left")
-        ttk.Button(footer, text="关闭", command=self.close_calendar, style="Secondary.TButton", width=7).pack(side="right")
+        ui.TtkButton(footer, text=msg('今天'), command=lambda: self._select_date(date.today()), style="Secondary.TButton", width=7).pack(side="left")
+        ui.TtkButton(footer, text=msg('关闭'), command=self.close_calendar, style="Secondary.TButton", width=7).pack(side="right")
 
     def _change_month(self, amount: int) -> None:
         month_index = self.calendar_year * 12 + self.calendar_month - 1 + amount
@@ -2175,14 +2186,14 @@ class DatePickerField(tk.Frame):
         super().destroy()
 
 
-class BoxSampleDialog(tk.Toplevel):
+class BoxSampleDialog(ui.Toplevel):
     """Compact cell editor shared by single-position and batch box entry."""
 
     FIELDS = (
-        ("sample_name", "细胞名称 *"),
-        ("sample_type", "细胞类别"),
-        ("stored_date", "入库日期 *"),
-        ("stored_by", "入库人 *"),
+        ("sample_name", msg('细胞名称 *')),
+        ("sample_type", msg('细胞类别')),
+        ("stored_date", msg('入库日期 *')),
+        ("stored_by", msg('入库人 *')),
     )
 
     def __init__(self, parent: tk.Misc, title: str, sample: BoxSample, *, batch: bool = False, allow_clear: bool = False):
@@ -2197,12 +2208,12 @@ class BoxSampleDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=58)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text=title, bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
+        ui.Label(header, text=title, bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=24, pady=20)
         if batch:
-            tk.Label(body, text="批量入库仅限空孔位。细胞名称可使用 {position} 自动生成孔位号。", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), anchor="w").pack(fill="x", pady=(0, 12))
+            ui.Label(body, text=msg('批量入库仅限空孔位。细胞名称可使用 {position} 自动生成孔位号。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), anchor="w", justify='left', wraplength=550).pack(fill="x", pady=(0, 12))
         form = tk.Frame(body, bg=COLORS["panel"])
         form.pack(fill="x")
         form.columnconfigure(0, weight=1)
@@ -2216,7 +2227,7 @@ class BoxSampleDialog(tk.Toplevel):
             row, column = divmod(index, 2)
             field = tk.Frame(form, bg=COLORS["panel"])
             field.grid(row=row, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0), pady=7)
-            tk.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
+            ui.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
             if key == "stored_date":
                 picker = DatePickerField(field, variable, self._save)
                 picker.pack(fill="x")
@@ -2229,7 +2240,7 @@ class BoxSampleDialog(tk.Toplevel):
             if index == 0:
                 self.after(80, self._focus_sample_name)
 
-        tk.Label(body, text="备注", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(12, 5))
+        ui.Label(body, text=msg('备注'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(12, 5))
         self.notes = tk.Text(body, height=4, width=58, wrap="word", relief="solid", borderwidth=1, font=("Microsoft YaHei UI", 10), fg=COLORS["text"])
         self.notes.pack(fill="x")
         self.notes.insert("1.0", sample.notes)
@@ -2238,19 +2249,19 @@ class BoxSampleDialog(tk.Toplevel):
 
         actions = tk.Frame(body, bg=COLORS["panel"])
         actions.pack(fill="x", pady=(18, 0))
-        primary_text = "批量入库" if batch else ("保存信息" if sample.occupied else "确认入库")
+        primary_text = msg('批量入库') if batch else (msg('保存信息') if sample.occupied else msg('确认入库'))
         RoundedButton(actions, text=primary_text, command=self._save, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=96, height=38, radius=10).pack(side="right")
-        RoundedButton(actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
         if allow_clear and sample.occupied:
-            RoundedButton(actions, text="清除孔位", command=self._clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="left")
-            RoundedButton(actions, text="出库", command=self._checkout, fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=82, height=38, radius=10).pack(side="left", padx=9)
+            RoundedButton(actions, text=msg('清除孔位'), command=self._clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="left")
+            RoundedButton(actions, text=msg('出库'), command=self._checkout, fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=82, height=38, radius=10).pack(side="left", padx=9)
 
         self.bind("<Escape>", lambda _event: self._cancel())
         self.update_idletasks()
         width, height = 610, self.winfo_reqheight()
         x = parent.winfo_rootx() + max(20, (parent.winfo_width() - width) // 2)
         y = parent.winfo_rooty() + max(20, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, x, y))
 
     def _newline_in_notes(self, _event: tk.Event) -> str:
         self.notes.insert("insert", "\n")
@@ -2271,13 +2282,13 @@ class BoxSampleDialog(tk.Toplevel):
                 pass
             AppDialog(
                 self,
-                title="信息未填写完整",
+                title=msg('信息未填写完整'),
                 message={
-                    "sample_name": "请填写细胞名称后再保存。",
-                    "stored_by": "请填写入库人后再保存。",
-                    "stored_date": "请填写入库日期后再保存。",
+                    "sample_name": msg('请填写细胞名称后再保存。'),
+                    "stored_by": msg('请填写入库人后再保存。'),
+                    "stored_date": msg('请填写入库日期后再保存。'),
                 }[missing_key],
-                buttons=[("知道了", True, "danger")],
+                buttons=[(msg('知道了'), True, "danger")],
                 width=410,
             ).show()
             try:
@@ -2332,13 +2343,13 @@ class BoxSampleDialog(tk.Toplevel):
         return self.result
 
 
-class BatchOutboundDialog(tk.Toplevel):
+class BatchOutboundDialog(ui.Toplevel):
     """Collect the common operator and business date for one outbound batch."""
 
     def __init__(self, parent: tk.Misc, count: int, location: str):
         super().__init__(parent)
         self.result: tuple[str, str] | None = None
-        dialog_title = "出库登记" if count == 1 else "批量出库登记"
+        dialog_title = msg('出库登记') if count == 1 else msg('批量出库登记')
         self.title(dialog_title)
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
@@ -2348,11 +2359,11 @@ class BatchOutboundDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=60)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text=dialog_title, bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=17)
+        ui.Label(header, text=dialog_title, bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=17)
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=24, pady=20)
-        tk.Label(body, text=f"将从 {location} 出库 {count} 支冻存管", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(0, 16))
+        ui.Label(body, text=msg('将从 {0} 出库 {1} 支冻存管', location, count), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(0, 16))
 
         form = tk.Frame(body, bg=COLORS["panel"])
         form.pack(fill="x")
@@ -2361,10 +2372,10 @@ class BatchOutboundDialog(tk.Toplevel):
         self.operator_var = tk.StringVar()
         self.date_var = tk.StringVar(value=date.today().isoformat())
         self.entries: list[ttk.Entry] = []
-        for column, (label, variable) in enumerate((("出库人 *", self.operator_var), ("出库日期 *", self.date_var))):
+        for column, (label, variable) in enumerate(((msg('出库人 *'), self.operator_var), (msg('出库日期 *'), self.date_var))):
             cell = tk.Frame(form, bg=COLORS["panel"])
             cell.grid(row=0, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0))
-            tk.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            ui.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
             if column == 1:
                 picker = DatePickerField(cell, variable, self._save)
                 picker.pack(fill="x")
@@ -2375,33 +2386,33 @@ class BatchOutboundDialog(tk.Toplevel):
                 _bind_ime_safe_return(entry, self._save)
             self.entries.append(entry)
 
-        self.error_label = tk.Label(body, text="", bg=COLORS["panel"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 8))
+        self.error_label = ui.Label(body, text="", bg=COLORS["panel"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 8))
         self.error_label.pack(anchor="w", pady=(12, 0))
         actions = tk.Frame(body, bg=COLORS["panel"])
         actions.pack(fill="x", pady=(12, 0))
-        RoundedButton(actions, text="确认出库", command=self._save, fill="#D9822B", hover_fill="#C56F1E", canvas_bg=COLORS["panel"], width=100, height=38, radius=10).pack(side="right")
-        RoundedButton(actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(actions, text=msg('确认出库'), command=self._save, fill="#D9822B", hover_fill="#C56F1E", canvas_bg=COLORS["panel"], width=100, height=38, radius=10).pack(side="right")
+        RoundedButton(actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=38, radius=10).pack(side="right", padx=9)
         self.bind("<Escape>", lambda _event: self._cancel())
         self.update_idletasks()
         width, height = 510, max(300, self.winfo_reqheight() + 20)
         x = parent.winfo_rootx() + max(20, (parent.winfo_width() - width) // 2)
         y = parent.winfo_rooty() + max(20, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, x, y))
         self.after(80, lambda: self.entries[0].focus_set())
 
     def _save(self) -> None:
         operator = self.operator_var.get().strip()
         operation_date = self.date_var.get().strip()
         if not operator:
-            self.error_label.configure(text="请填写出库人。")
+            self.error_label.configure(text=msg('请填写出库人。'))
             self.entries[0].focus_set()
             return
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}|\d{8}", operation_date):
-            self.error_label.configure(text="出库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。")
+            self.error_label.configure(text=msg('出库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'))
             self.entries[1].focus_set()
             return
         if not FreezerManagerApp._valid_date(operation_date):
-            self.error_label.configure(text="出库日期不是有效日期。")
+            self.error_label.configure(text=msg('出库日期不是有效日期。'))
             self.entries[1].focus_set()
             return
         normalized_date = datetime.strptime(operation_date, "%Y%m%d").date().isoformat() if len(operation_date) == 8 else operation_date
@@ -2425,13 +2436,13 @@ class BatchOutboundDialog(tk.Toplevel):
         return self.result
 
 
-class InventoryEventExportDialog(tk.Toplevel):
+class InventoryEventExportDialog(ui.Toplevel):
     """Collect the inclusive date range for the formal inbound/outbound ledger."""
 
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.result: tuple[str, str] | None = None
-        self.title("导出出入库登记")
+        self.title(msg('导出出入库登记'))
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
         self.transient(parent)
@@ -2440,9 +2451,9 @@ class InventoryEventExportDialog(tk.Toplevel):
         header = tk.Frame(self, bg=COLORS["sidebar"], height=60)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(
+        ui.Label(
             header,
-            text="导出出入库登记",
+            text=msg('导出出入库登记'),
             bg=COLORS["sidebar"],
             fg="white",
             font=("Microsoft YaHei UI", 12, "bold"),
@@ -2450,9 +2461,9 @@ class InventoryEventExportDialog(tk.Toplevel):
 
         body = tk.Frame(self, bg=COLORS["panel"])
         body.pack(fill="both", expand=True, padx=24, pady=20)
-        tk.Label(
+        ui.Label(
             body,
-            text="仅导出普通入库和出库记录（包含起止日期）。",
+            text=msg('仅导出普通入库和出库记录（包含起止日期）。'),
             bg=COLORS["panel"],
             fg=COLORS["muted"],
             font=("Microsoft YaHei UI", 9),
@@ -2467,12 +2478,12 @@ class InventoryEventExportDialog(tk.Toplevel):
         self.date_to_var = tk.StringVar(value=today)
         self.entries: list[ttk.Entry] = []
         for column, (label, variable) in enumerate((
-            ("初始日期 *", self.date_from_var),
-            ("截至日期 *", self.date_to_var),
+            (msg('初始日期 *'), self.date_from_var),
+            (msg('截至日期 *'), self.date_to_var),
         )):
             cell = tk.Frame(form, bg=COLORS["panel"])
             cell.grid(row=0, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0))
-            tk.Label(
+            ui.Label(
                 cell,
                 text=label,
                 bg=COLORS["panel"],
@@ -2482,7 +2493,7 @@ class InventoryEventExportDialog(tk.Toplevel):
             picker = DatePickerField(cell, variable, self._save)
             picker.pack(fill="x")
             entry = picker.entry
-            tk.Label(
+            ui.Label(
                 cell,
                 text="YYYY-MM-DD",
                 bg=COLORS["panel"],
@@ -2491,7 +2502,7 @@ class InventoryEventExportDialog(tk.Toplevel):
             ).pack(anchor="w", pady=(3, 0))
             self.entries.append(entry)
 
-        self.error_label = tk.Label(
+        self.error_label = ui.Label(
             body,
             text="",
             bg=COLORS["panel"],
@@ -2503,7 +2514,7 @@ class InventoryEventExportDialog(tk.Toplevel):
         actions.pack(fill="x", pady=(12, 0))
         RoundedButton(
             actions,
-            text="导出",
+            text=msg('导出'),
             command=self._save,
             fill=COLORS["primary"],
             hover_fill=COLORS["primary_dark"],
@@ -2514,7 +2525,7 @@ class InventoryEventExportDialog(tk.Toplevel):
         ).pack(side="right")
         RoundedButton(
             actions,
-            text="取消",
+            text=msg('取消'),
             command=self._cancel,
             fill="#E8EDF4",
             foreground=COLORS["text"],
@@ -2531,7 +2542,7 @@ class InventoryEventExportDialog(tk.Toplevel):
         width, height = 530, max(310, self.winfo_reqheight() + 14)
         x = parent.winfo_rootx() + max(20, (parent.winfo_width() - width) // 2)
         y = parent.winfo_rooty() + max(20, (parent.winfo_height() - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, x, y))
         self.after(80, lambda: self.entries[0].focus_set())
 
     @staticmethod
@@ -2547,21 +2558,21 @@ class InventoryEventExportDialog(tk.Toplevel):
         raw_from = self.date_from_var.get().strip()
         raw_to = self.date_to_var.get().strip()
         if not raw_from:
-            self.error_label.configure(text="请选择或输入初始日期。")
+            self.error_label.configure(text=msg('请选择或输入初始日期。'))
             self.entries[0].focus_set()
             return
         date_from = self._normalize_date(raw_from)
         if date_from is None:
-            self.error_label.configure(text="初始日期不是有效日期，请使用 YYYY-MM-DD。")
+            self.error_label.configure(text=msg('初始日期不是有效日期，请使用 YYYY-MM-DD。'))
             self.entries[0].focus_set()
             return
         date_to = self._normalize_date(raw_to)
         if date_to is None:
-            self.error_label.configure(text="截至日期不是有效日期，请使用 YYYY-MM-DD。")
+            self.error_label.configure(text=msg('截至日期不是有效日期，请使用 YYYY-MM-DD。'))
             self.entries[1].focus_set()
             return
         if date_from > date_to:
-            self.error_label.configure(text="初始日期不能晚于截至日期。")
+            self.error_label.configure(text=msg('初始日期不能晚于截至日期。'))
             self.entries[0].focus_set()
             return
         self.result = (date_from, date_to)
@@ -2736,8 +2747,11 @@ all_unit_codes = sqlite_all_unit_codes
 
 
 class FreezerManagerApp(tk.Tk):
-    def __init__(self, repository: FreezerRepository | None = None):
+    def __init__(self, repository: FreezerRepository | None = None, *, preferences_path: Path | None = None):
         super().__init__()
+        settings_path = preferences_path or (Path(repository.path).with_name('preferences.json') if repository is not None else preference_path())
+        self.language_state = LanguageState(settings_path)
+        self.language_choice = tk.StringVar(value='English' if self.language_state.language == 'en' else '简体中文')
         self._scrollable_frames: list[ScrollableFrame] = []
         self.repository = repository or FreezerRepository()
         self.current_layer = 1
@@ -2747,7 +2761,7 @@ class FreezerManagerApp(tk.Tk):
         self.filter_stored_by_var = tk.StringVar()
         self.filter_date_from_var = tk.StringVar()
         self.filter_date_to_var = tk.StringVar()
-        self.filter_status_var = tk.StringVar(value="有细胞")
+        self.filter_status_var = tk.StringVar(value=msg('有细胞'))
         self.result_selection: dict[str, tk.BooleanVar] = {}
         self.current_filter_results: list[tuple[str, UnitRecord]] = []
         self.pending_import_path: Path | None = None
@@ -2778,16 +2792,16 @@ class FreezerManagerApp(tk.Tk):
         self.box_column_labels: list[tk.Label] = []
         self.box_row_labels: list[tk.Label] = []
         self.inventory_query_var = tk.StringVar()
-        self.inventory_status_var = tk.StringVar(value="全部")
+        self.inventory_status_var = tk.StringVar(value=msg('全部'))
         self.event_query_var = tk.StringVar()
-        self.event_action_var = tk.StringVar(value="全部操作")
+        self.event_action_var = ui.MessageVar(value=msg('全部操作'))
         self.event_action_filters = set(self._event_action_labels())
-        self.event_freezer_var = tk.StringVar(value="全部液氮罐")
+        self.event_freezer_var = tk.StringVar(value=msg('全部液氮罐'))
         self.event_date_from_var = tk.StringVar()
         self.event_date_to_var = tk.StringVar()
         self.empty_required_var = tk.StringVar(value="1")
-        self.empty_scope_var = tk.StringVar(value="当前液氮罐")
-        self.empty_arrangement_var = tk.StringVar(value="连续优先")
+        self.empty_scope_var = tk.StringVar(value=msg('当前液氮罐'))
+        self.empty_arrangement_var = tk.StringVar(value=msg('连续优先'))
         self.pending_empty_recommendation: tuple[str, str, list[str]] | None = None
         self.empty_opened_boxes: set[tuple[str, str]] = set()
         self.empty_search_signature: tuple[int, str, str] | None = None
@@ -2802,23 +2816,46 @@ class FreezerManagerApp(tk.Tk):
         self._page_generation = 0
         self._page_commit_job: str | None = None
         self._visible_content: ttk.Frame | None = None
-        self.page_title_var = tk.StringVar(value="冻存盒总览")
+        self.page_title_var = ui.MessageVar(value=msg('冻存盒总览'))
         self.title(APP_TITLE)
         window_width = min(1240, self.winfo_screenwidth() - 80)
         window_height = min(780, self.winfo_screenheight() - 100)
         left = max(0, (self.winfo_screenwidth() - window_width) // 2)
         top = max(0, (self.winfo_screenheight() - window_height) // 2 - 12)
-        self.geometry(f"{window_width}x{window_height}+{left}+{top}")
+        self.geometry(msg('{0}x{1}+{2}+{3}', window_width, window_height, left, top))
         self.minsize(1000, 620)
         self.configure(background=COLORS["bg"])
         self._configure_styles()
         self._build_shell()
+        ui.register(self)
+        self._apply_language()
         self.bind("<MouseWheel>", self._dispatch_page_mousewheel, add="+")
         self.bind("<Button-4>", self._dispatch_page_mousewheel, add="+")
         self.bind("<Button-5>", self._dispatch_page_mousewheel, add="+")
         self.bind_all("<Shift-MouseWheel>", self._on_box_grid_horizontal_scroll, add="+")
         self.bind("<ButtonRelease-1>", self._finish_box_drag_outside_cell, add="+")
         self.show_overview()
+
+    def _apply_language(self) -> None:
+        self.title(ui.display(self, APP_TITLE))
+        self.language_choice.set('English' if self.language_state.language == 'en' else '简体中文')
+        self.sidebar.configure(width=250 if self.language_state.language == 'en' else 224)
+
+    def change_language(self, language: str) -> bool:
+        def dialog_open(widget):
+            return any((isinstance(child, tk.Toplevel) and child.winfo_viewable()) or dialog_open(child)
+                       for child in widget.winfo_children())
+        if dialog_open(self) or getattr(self, '_inline_editor_active', False):
+            self._apply_language()
+            self.bell()
+            return False
+        try:
+            self.language_state.set_language(language)
+        except OSError as exc:
+            self._apply_language()
+            self._notify(msg('无法保存语言设置'), str(exc), danger=True)
+            return False
+        return True
 
     def _register_scrollable_frame(self, frame: ScrollableFrame) -> None:
         """Track page scrollers without adding a binding for every page."""
@@ -3040,19 +3077,20 @@ class FreezerManagerApp(tk.Tk):
         shell.pack(fill="both", expand=True)
 
         sidebar = tk.Frame(shell, bg=COLORS["sidebar"], width=224)
+        self.sidebar = sidebar
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         brand = tk.Frame(sidebar, bg=COLORS["sidebar"])
         brand.pack(fill="x", padx=22, pady=(10, 7))
-        icon = tk.Label(brand, text="LN₂", width=4, height=2, bg=COLORS["primary"], fg="white", font=("Microsoft YaHei UI", 11, "bold"))
+        icon = ui.Label(brand, text="LN₂", width=4, height=2, bg=COLORS["primary"], fg="white", font=("Microsoft YaHei UI", 11, "bold"))
         icon.pack(side="left", padx=(0, 11))
         brand_text = tk.Frame(brand, bg=COLORS["sidebar"])
         brand_text.pack(side="left")
-        brand_title = tk.Label(brand_text, text="液氮罐管理", fg="white", bg=COLORS["sidebar"], font=("Microsoft YaHei UI", 14, "bold"), cursor="hand2")
+        brand_title = ui.Label(brand_text, text=msg('液氮罐管理'), fg="white", bg=COLORS["sidebar"], font=("Microsoft YaHei UI", 14, "bold"), cursor="hand2")
         brand_title.pack(anchor="w")
-        self.brand_version_label = tk.Label(
+        self.brand_version_label = ui.Label(
             brand_text,
-            text=f"LOCAL STORAGE · v{APP_VERSION}",
+            text=msg('LOCAL STORAGE · v{0}', APP_VERSION),
             fg=COLORS["sidebar_muted"],
             bg=COLORS["sidebar"],
             font=("Segoe UI", 7, "bold"),
@@ -3073,9 +3111,9 @@ class FreezerManagerApp(tk.Tk):
 
         freezer_panel = tk.Frame(sidebar, bg="#0E1E31", highlightthickness=1, highlightbackground="#294766")
         freezer_panel.pack(fill="x", padx=15, pady=(0, 7))
-        tk.Label(freezer_panel, text="当前液氮罐", fg=COLORS["sidebar_muted"], bg="#0E1E31", font=("Microsoft YaHei UI", 8), anchor="w").pack(fill="x", padx=12, pady=(8, 4))
+        ui.Label(freezer_panel, text=msg('当前液氮罐'), fg=COLORS["sidebar_muted"], bg="#0E1E31", font=("Microsoft YaHei UI", 8), anchor="w").pack(fill="x", padx=12, pady=(8, 4))
         self.freezer_selector_var = tk.StringVar()
-        self.freezer_selector = ttk.Combobox(
+        self.freezer_selector = ui.Combobox(
             freezer_panel,
             textvariable=self.freezer_selector_var,
             state="readonly",
@@ -3088,7 +3126,7 @@ class FreezerManagerApp(tk.Tk):
         freezer_actions.pack(fill="x", padx=10, pady=(6, 7))
         RoundedButton(
             freezer_actions,
-            text="＋ 新增",
+            text=msg('＋ 新增'),
             command=self.add_freezer_dialog,
             fill="#1C3552",
             hover_fill="#284664",
@@ -3101,7 +3139,7 @@ class FreezerManagerApp(tk.Tk):
         ).pack(side="left")
         RoundedButton(
             freezer_actions,
-            text="重命名",
+            text=msg('重命名'),
             command=self.rename_freezer_dialog,
             fill="#1C3552",
             hover_fill="#284664",
@@ -3114,7 +3152,7 @@ class FreezerManagerApp(tk.Tk):
         ).pack(side="right")
         RoundedButton(
             freezer_panel,
-            text="归档管理",
+            text=msg('归档管理'),
             command=self.show_archive_page,
             fill="#1C3552",
             hover_fill="#284664",
@@ -3126,7 +3164,7 @@ class FreezerManagerApp(tk.Tk):
             font=("Microsoft YaHei UI", 8),
         ).pack(fill="x", padx=10, pady=(0, 7))
 
-        workbench_label = tk.Label(sidebar, text="工作台", fg=COLORS["sidebar_muted"], bg=COLORS["sidebar"], font=("Microsoft YaHei UI", 8), anchor="w")
+        workbench_label = ui.Label(sidebar, text=msg('工作台'), fg=COLORS["sidebar_muted"], bg=COLORS["sidebar"], font=("Microsoft YaHei UI", 8), anchor="w")
         workbench_label.pack(fill="x", padx=25, pady=(0, 3))
         self.sidebar_scroller = ScrollableFrame(sidebar, style="Sidebar.TFrame")
         self.sidebar_scroller.canvas.configure(background=COLORS["sidebar"])
@@ -3134,14 +3172,14 @@ class FreezerManagerApp(tk.Tk):
         self.sidebar_scroller.pack(fill="both", expand=True)
         navigation = self.sidebar_scroller.body
         self.nav_buttons = {
-            "overview": self._sidebar_button(navigation, "▦   冻存盒总览", self.show_overview, active=True),
-            "search": self._sidebar_button(navigation, "⌕   查找细胞", self.show_search_page),
-            "empty": self._sidebar_button(navigation, "□   查找空位", self.show_empty_search_page),
-            "inventory": self._sidebar_button(navigation, "▤   细胞库存", self.show_inventory_page),
-            "events": self._sidebar_button(navigation, "↕   出入库登记", self.show_inventory_events_page),
-            "import": self._sidebar_button(navigation, "⇧   从 Excel 导入", self.import_from_excel),
-            "export": self._sidebar_button(navigation, "⇩   导出 Excel", self.export_to_excel),
-            "backup": self._sidebar_button(navigation, "◷   备份与恢复", self.show_backup_page),
+            "overview": self._sidebar_button(navigation, msg('▦   冻存盒总览'), self.show_overview, active=True),
+            "search": self._sidebar_button(navigation, msg('⌕   查找细胞'), self.show_search_page),
+            "empty": self._sidebar_button(navigation, msg('□   查找空位'), self.show_empty_search_page),
+            "inventory": self._sidebar_button(navigation, msg('▤   细胞库存'), self.show_inventory_page),
+            "events": self._sidebar_button(navigation, msg('↕   出入库登记'), self.show_inventory_events_page),
+            "import": self._sidebar_button(navigation, msg('⇧   从 Excel 导入'), self.import_from_excel),
+            "export": self._sidebar_button(navigation, msg('⇩   导出 Excel'), self.export_to_excel),
+            "backup": self._sidebar_button(navigation, msg('◷   备份与恢复'), self.show_backup_page),
         }
 
         summary = tk.Frame(sidebar, bg="#0E1E31", height=96, highlightthickness=1, highlightbackground="#203A58")
@@ -3150,10 +3188,17 @@ class FreezerManagerApp(tk.Tk):
         # clipped remainder on shorter screens.
         summary.pack(side="bottom", fill="x", padx=16, pady=(10, 12), before=workbench_label)
         summary.pack_propagate(False)
-        tk.Label(summary, text="冻存管容量", bg="#0E1E31", fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=14, pady=(10, 2))
-        self.sidebar_usage_label = tk.Label(summary, text="", bg="#0E1E31", fg="white", font=("Microsoft YaHei UI", 15, "bold"))
+        language_row = tk.Frame(sidebar, bg=COLORS['sidebar'])
+        language_row.pack(side='bottom', fill='x', padx=16, pady=(4, 0), before=workbench_label)
+        ui.Label(language_row, text='语言 / Language', bg=COLORS['sidebar'], fg=COLORS['sidebar_muted'], font=('Segoe UI', 8)).pack(anchor='w')
+        self.language_selector = ttk.Combobox(language_row, textvariable=self.language_choice,
+                                             values=('简体中文', 'English'), state='readonly', width=15)
+        self.language_selector.pack(fill='x', pady=(3, 0))
+        self.language_selector.bind('<<ComboboxSelected>>', lambda _event: self.change_language('en' if self.language_choice.get() == 'English' else 'zh'))
+        ui.Label(summary, text=msg('冻存管容量'), bg="#0E1E31", fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=14, pady=(10, 2))
+        self.sidebar_usage_label = ui.Label(summary, text="", bg="#0E1E31", fg="white", font=("Microsoft YaHei UI", 15, "bold"))
         self.sidebar_usage_label.pack(anchor="w", padx=14)
-        self.sidebar_rate_label = tk.Label(summary, text="", bg="#0E1E31", fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8))
+        self.sidebar_rate_label = ui.Label(summary, text="", bg="#0E1E31", fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8))
         self.sidebar_rate_label.pack(anchor="w", padx=14)
         self.sidebar_capacity_bar = ttk.Progressbar(summary, style="Capacity.Horizontal.TProgressbar", maximum=100)
         self.sidebar_capacity_bar.pack(fill="x", padx=14, pady=(4, 0), ipady=0)
@@ -3164,7 +3209,7 @@ class FreezerManagerApp(tk.Tk):
         header = tk.Frame(main, bg=COLORS["panel"], height=72, highlightthickness=1, highlightbackground=COLORS["line"])
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, textvariable=self.page_title_var, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 14, "bold")).pack(side="left", padx=28)
+        ui.Label(header, textvariable=self.page_title_var, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 14, "bold")).pack(side="left", padx=28)
 
         self.content_host = tk.Frame(main, bg=COLORS["bg"])
         self.content_host.pack(fill="both", expand=True)
@@ -3241,26 +3286,23 @@ class FreezerManagerApp(tk.Tk):
             )
 
     def _notify(self, title: str, message: str, *, danger: bool = False) -> None:
+        if not isinstance(message, Message):
+            message = error_message(message)
         AppDialog(
             self,
             title=title,
             message=message,
-            buttons=[("知道了", True, "danger" if danger else "primary")],
+            buttons=[(msg('知道了'), True, "danger" if danger else "primary")],
         ).show()
 
     def show_about_dialog(self, _event: tk.Event | None = None) -> None:
         AppDialog(
             self,
-            title="关于液氮罐管理系统",
+            title=msg('关于液氮罐管理系统'),
             message=(
-                "液氮罐管理系统\n\n"
-                f"版本：v{APP_VERSION}\n"
-                f"开发者：{APP_DEVELOPER}\n"
-                f"技术支持：{APP_DEVELOPER}\n"
-                f"联系邮箱：{APP_SUPPORT_EMAIL}\n\n"
-                f"© 2026 {APP_DEVELOPER}"
+                msg('液氮罐管理系统\n\n版本：v{0}\n开发者：{1}\n技术支持：{2}\n联系邮箱：{3}\n\n© 2026 {4}', APP_VERSION, APP_DEVELOPER, APP_DEVELOPER, APP_SUPPORT_EMAIL, APP_DEVELOPER)
             ),
-            buttons=[("关闭", True, "primary")],
+            buttons=[(msg('关闭'), True, "primary")],
             width=480,
         ).show()
 
@@ -3270,7 +3312,7 @@ class FreezerManagerApp(tk.Tk):
             title=title,
             message=message,
             initial_value=initial,
-            buttons=[("取消", None, "secondary"), ("确定", "__input__", "primary")],
+            buttons=[(msg('取消'), None, "secondary"), (msg('确定'), "__input__", "primary")],
         ).show()
         return str(result) if result is not None else None
 
@@ -3280,8 +3322,8 @@ class FreezerManagerApp(tk.Tk):
             title=title,
             message=message,
             buttons=[
-                ("取消", False, "secondary"),
-                ("确认", True, "danger" if danger else "primary"),
+                (msg('取消'), False, "secondary"),
+                (msg('确认'), True, "danger" if danger else "primary"),
             ],
         ).show()
         return result is True
@@ -3289,16 +3331,14 @@ class FreezerManagerApp(tk.Tk):
     def _choose_import_mode(self, freezer_count: int, record_count: int) -> str | None:
         result = AppDialog(
             self,
-            title="选择导入方式",
+            title=msg('选择导入方式'),
             message=(
-                f"Excel 中识别到 {freezer_count} 个液氮罐、{record_count} 条占用记录。\n\n"
-                "合并导入：更新同编号记录，保留 Excel 中未出现的现有记录。\n"
-                "覆盖同名：先清空同名液氮罐，再按 Excel 内容恢复。"
+                msg('Excel 中识别到 {0} 个液氮罐、{1} 条占用记录。\n\n合并导入：更新同编号记录，保留 Excel 中未出现的现有记录。\n覆盖同名：先清空同名液氮罐，再按 Excel 内容恢复。', freezer_count, record_count)
             ),
             buttons=[
-                ("取消", None, "secondary"),
-                ("覆盖同名", "overwrite", "danger"),
-                ("合并导入", "merge", "primary"),
+                (msg('取消'), None, "secondary"),
+                (msg('覆盖同名'), "overwrite", "danger"),
+                (msg('合并导入'), "merge", "primary"),
             ],
             width=560,
         ).show()
@@ -3307,8 +3347,8 @@ class FreezerManagerApp(tk.Tk):
     def _update_sidebar_summary(self) -> None:
         used = self.repository.tube_used_count
         capacity = self.repository.tube_capacity
-        self.sidebar_usage_label.configure(text=f"{used} / {capacity}")
-        self.sidebar_rate_label.configure(text=f"当前使用率 {used / capacity * 100:.1f}%")
+        self.sidebar_usage_label.configure(text=msg('{0} / {1}', used, capacity))
+        self.sidebar_rate_label.configure(text=msg('当前使用率 {0}%', format(used / capacity * 100, msg('.1f'))))
         self.sidebar_capacity_bar.configure(value=used / capacity * 100)
 
     def _refresh_freezer_selector(self) -> None:
@@ -3325,7 +3365,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.switch_freezer(self._freezer_ids[selection])
         except (OSError, ValueError) as exc:
-            self._notify("切换失败", str(exc), danger=True)
+            self._notify(msg('切换失败'), str(exc), danger=True)
             self._refresh_freezer_selector()
             return
         self.current_layer = 1
@@ -3337,14 +3377,14 @@ class FreezerManagerApp(tk.Tk):
         self.show_overview()
 
     def add_freezer_dialog(self) -> None:
-        suggested = f"液氮罐 {len(self.repository.freezers) + 1}"
-        name = self._ask_text("新增液氮罐", "请输入新液氮罐的名称：", suggested)
+        suggested = msg('液氮罐 {0}', len(self.repository.freezers) + 1)
+        name = self._ask_text(msg('新增液氮罐'), msg('请输入新液氮罐的名称：'), suggested)
         if name is None:
             return
         try:
             self.repository.add_freezer(name)
         except (OSError, ValueError) as exc:
-            self._notify("无法新增液氮罐", str(exc), danger=True)
+            self._notify(msg('无法新增液氮罐'), str(exc), danger=True)
             return
         self.current_layer = 1
         self._refresh_freezer_selector()
@@ -3352,21 +3392,21 @@ class FreezerManagerApp(tk.Tk):
 
     def rename_freezer_dialog(self) -> None:
         name = self._ask_text(
-            "重命名液氮罐", "请输入新的液氮罐名称：", self.repository.freezer_name
+            msg('重命名液氮罐'), msg('请输入新的液氮罐名称：'), self.repository.freezer_name
         )
         if name is None:
             return
         try:
             self.repository.rename_freezer(self.repository.current_freezer_id, name)
         except (OSError, ValueError) as exc:
-            self._notify("无法重命名", str(exc), danger=True)
+            self._notify(msg('无法重命名'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self.show_overview()
 
     def show_archive_page(self) -> None:
         self._set_active_nav(None)
-        self.page_title_var.set("液氮罐归档管理")
+        self.page_title_var.set(msg('液氮罐归档管理'))
         self.clear_content()
         page = ttk.Frame(self.content, style="Page.TFrame", padding=(28, 24))
         page.pack(fill="both", expand=True)
@@ -3374,40 +3414,40 @@ class FreezerManagerApp(tk.Tk):
         heading.pack(fill="x", pady=(0, 16))
         title_box = ttk.Frame(heading, style="Page.TFrame")
         title_box.pack(side="left")
-        ttk.Label(title_box, text="液氮罐归档管理", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text="归档不会删除任何盒位或细胞数据，可随时恢复。", style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
+        ui.TtkLabel(title_box, text=msg('液氮罐归档管理'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('归档不会删除任何盒位或细胞数据，可随时恢复。'), style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
 
         active_panel = self._panel(page)
         active_panel.pack(fill="x", pady=(0, 14))
-        tk.Label(active_panel, text="当前液氮罐", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
+        ui.Label(active_panel, text=msg('当前液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
         current = self.repository.current_freezer
         row = tk.Frame(active_panel, bg=COLORS["panel"])
         row.pack(fill="x", padx=20, pady=(0, 18))
-        tk.Label(row, text=current.name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
-        tk.Label(row, text=f"  ·  {self.repository.used_count} 个有细胞冻存盒", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
-        RoundedButton(row, text="归档当前液氮罐", command=self.archive_current_freezer, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=148, height=36, radius=9).pack(side="right")
+        ui.Label(row, text=current.name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(row, text=msg('  ·  {0} 个有细胞冻存盒', self.repository.used_count), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
+        RoundedButton(row, text=msg('归档当前液氮罐'), command=self.archive_current_freezer, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=148, height=36, radius=9).pack(side="right")
 
         archived_panel = self._panel(page)
         archived_panel.pack(fill="both", expand=True)
-        tk.Label(archived_panel, text="已归档液氮罐", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
+        ui.Label(archived_panel, text=msg('已归档液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
         archived = self.repository.list_archived_freezers()
         if not archived:
-            tk.Label(archived_panel, text="暂无已归档液氮罐", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=24).pack()
+            ui.Label(archived_panel, text=msg('暂无已归档液氮罐'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=24).pack()
         for freezer_id, name, used in archived:
             item = tk.Frame(archived_panel, bg=COLORS["panel"])
             item.pack(fill="x", padx=20, pady=8)
-            tk.Label(item, text=name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
-            tk.Label(item, text=f"  ·  {used} 条记录", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
-            RoundedButton(item, text="恢复", command=lambda value=freezer_id: self.restore_archived_freezer(value), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=82, height=34, radius=9).pack(side="right")
+            ui.Label(item, text=name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+            ui.Label(item, text=msg('  ·  {0} 条记录', used), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
+            RoundedButton(item, text=msg('恢复'), command=lambda value=freezer_id: self.restore_archived_freezer(value), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=82, height=34, radius=9).pack(side="right")
 
     def archive_current_freezer(self) -> None:
         freezer = self.repository.current_freezer
-        if not self._ask_confirm("确认归档", f"归档“{freezer.name}”吗？\n其中 {self.repository.used_count} 个已使用细胞冻存盒会完整保留。", danger=True):
+        if not self._ask_confirm(msg('确认归档'), msg('归档“{0}”吗？\n其中 {1} 个已使用细胞冻存盒会完整保留。', freezer.name, self.repository.used_count), danger=True):
             return
         try:
             self.repository.archive_freezer(self.repository.current_freezer_id)
         except (OSError, ValueError) as exc:
-            self._notify("无法归档", str(exc), danger=True)
+            self._notify(msg('无法归档'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self._update_sidebar_summary()
@@ -3417,14 +3457,14 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.restore_freezer(freezer_id)
         except (OSError, ValueError) as exc:
-            self._notify("无法恢复", str(exc), danger=True)
+            self._notify(msg('无法恢复'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self.show_archive_page()
 
     def show_backup_page(self) -> None:
         self._set_active_nav("backup")
-        self.page_title_var.set("备份与恢复")
+        self.page_title_var.set(msg('备份与恢复'))
         self.clear_content()
         page = ttk.Frame(self.content, style="Page.TFrame", padding=(28, 24))
         page.pack(fill="both", expand=True)
@@ -3432,85 +3472,85 @@ class FreezerManagerApp(tk.Tk):
         heading.pack(fill="x", pady=(0, 16))
         title_box = ttk.Frame(heading, style="Page.TFrame")
         title_box.pack(side="left")
-        ttk.Label(title_box, text="备份与恢复", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text="SQLite 数据库备份包含所有液氮罐、归档状态和细胞记录。", style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
-        RoundedButton(heading, text="＋ 创建备份", command=self.create_manual_backup, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["bg"], width=120, height=40, radius=10).pack(side="right")
-        RoundedButton(heading, text="清理旧备份", command=self.prune_old_backups, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=112, height=40, radius=10).pack(side="right", padx=(0, 8))
+        ui.TtkLabel(title_box, text=msg('备份与恢复'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('SQLite 数据库备份包含所有液氮罐、归档状态和细胞记录。'), style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
+        RoundedButton(heading, text=msg('＋ 创建备份'), command=self.create_manual_backup, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["bg"], width=120, height=40, radius=10).pack(side="right")
+        RoundedButton(heading, text=msg('清理旧备份'), command=self.prune_old_backups, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=112, height=40, radius=10).pack(side="right", padx=(0, 8))
 
         panel = self._panel(page)
         panel.pack(fill="both", expand=True)
-        tk.Label(panel, text="可用备份", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
+        ui.Label(panel, text=msg('可用备份'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=20, pady=(17, 8))
         backups = self.repository.list_backups()
         if not backups:
-            tk.Label(panel, text="暂无备份。Excel 导入和数据库恢复前也会自动创建备份。", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=30).pack()
+            ui.Label(panel, text=msg('暂无备份。Excel 导入和数据库恢复前也会自动创建备份。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=30).pack()
         for path, modified, size in backups[:30]:
             item = tk.Frame(panel, bg=COLORS["panel"])
             item.pack(fill="x", padx=20, pady=7)
-            tk.Label(item, text=path.stem, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
-            tk.Label(item, text=f"  {modified:%Y-%m-%d %H:%M:%S}  ·  {size / 1024:.1f} KB", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
-            RoundedButton(item, text="恢复此备份", command=lambda value=path: self.restore_selected_backup(value), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=112, height=34, radius=9).pack(side="right")
-            RoundedButton(item, text="删除", command=lambda value=path: self.delete_selected_backup(value), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(0, 8))
+            ui.Label(item, text=path.stem, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
+            ui.Label(item, text=msg('  {0}  ·  {1} KB', format(modified, msg('%Y-%m-%d %H:%M:%S')), format(size / 1024, msg('.1f'))), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
+            RoundedButton(item, text=msg('恢复此备份'), command=lambda value=path: self.restore_selected_backup(value), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=112, height=34, radius=9).pack(side="right")
+            RoundedButton(item, text=msg('删除'), command=lambda value=path: self.delete_selected_backup(value), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(0, 8))
 
     def create_manual_backup(self) -> None:
         try:
-            path = self.repository.create_backup("手动备份")
+            path = self.repository.create_backup(msg('手动备份'))
         except OSError as exc:
-            self._notify("备份失败", str(exc), danger=True)
+            self._notify(msg('备份失败'), str(exc), danger=True)
             return
-        self._notify("备份完成", f"已创建：{path.name}")
+        self._notify(msg('备份完成'), msg('已创建：{0}', path.name))
         self.show_backup_page()
 
     def prune_old_backups(self) -> None:
-        value = self._ask_text("清理旧备份", "请输入希望保留的最近备份数量（1–200）：", "20")
+        value = self._ask_text(msg('清理旧备份'), msg('请输入希望保留的最近备份数量（1–200）：'), "20")
         if value is None:
             return
         try:
             keep = int(value.strip())
         except ValueError:
-            self._notify("数量无效", "请输入 1 到 200 之间的整数。", danger=True)
+            self._notify(msg('数量无效'), msg('请输入 1 到 200 之间的整数。'), danger=True)
             return
         backups = self.repository.list_backups()
         remove_count = max(0, len(backups) - keep)
         if remove_count == 0:
-            self._notify("无需清理", f"当前共有 {len(backups)} 份备份，不超过保留数量。")
+            self._notify(msg('无需清理'), msg('当前共有 {0} 份备份，不超过保留数量。', len(backups)))
             return
-        if not self._ask_confirm("确认清理", f"将保留最近 {keep} 份备份，并永久删除更早的 {remove_count} 份备份。", danger=True):
+        if not self._ask_confirm(msg('确认清理'), msg('将保留最近 {0} 份备份，并永久删除更早的 {1} 份备份。', keep, remove_count), danger=True):
             return
         try:
             removed = self.repository.prune_backups(keep)
         except (OSError, ValueError) as exc:
-            self._notify("清理失败", str(exc), danger=True)
+            self._notify(msg('清理失败'), str(exc), danger=True)
             return
-        self._notify("清理完成", f"已删除 {removed} 份旧备份。")
+        self._notify(msg('清理完成'), msg('已删除 {0} 份旧备份。', removed))
         self.show_backup_page()
 
     def delete_selected_backup(self, path: Path) -> None:
         if not self._ask_confirm(
-            "确认删除备份",
-            f"确定永久删除备份“{path.stem}”吗？\n删除后无法通过本程序恢复。",
+            msg('确认删除备份'),
+            msg('确定永久删除备份“{0}”吗？\n删除后无法通过本程序恢复。', path.stem),
             danger=True,
         ):
             return
         try:
             self.repository.delete_backup(path)
         except (OSError, ValueError) as exc:
-            self._notify("删除失败", str(exc), danger=True)
+            self._notify(msg('删除失败'), str(exc), danger=True)
             self.show_backup_page()
             return
-        self._notify("备份已删除", f"已删除：{path.name}")
+        self._notify(msg('备份已删除'), msg('已删除：{0}', path.name))
         self.show_backup_page()
 
     def restore_selected_backup(self, path: Path) -> None:
-        if not self._ask_confirm("确认恢复", f"确定恢复备份“{path.stem}”吗？\n当前数据库会先自动创建安全备份。", danger=True):
+        if not self._ask_confirm(msg('确认恢复'), msg('确定恢复备份“{0}”吗？\n当前数据库会先自动创建安全备份。', path.stem), danger=True):
             return
         try:
             safety = self.repository.restore_backup(path)
         except (OSError, ValueError) as exc:
-            self._notify("恢复失败", str(exc), danger=True)
+            self._notify(msg('恢复失败'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self._update_sidebar_summary()
-        self._notify("恢复完成", f"数据已恢复。\n恢复前安全备份：{safety.name}")
+        self._notify(msg('恢复完成'), msg('数据已恢复。\n恢复前安全备份：{0}', safety.name))
         self.show_overview()
 
     def focus_search(self) -> None:
@@ -3519,7 +3559,7 @@ class FreezerManagerApp(tk.Tk):
     def show_empty_search_page(self, *, run_search: bool = False) -> None:
         self._set_active_nav("empty")
         self.box_search_return_mode = ""
-        self.page_title_var.set("查找空位")
+        self.page_title_var.set(msg('查找空位'))
         self.clear_content()
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
@@ -3528,8 +3568,8 @@ class FreezerManagerApp(tk.Tk):
 
         heading = ttk.Frame(page, style="Page.TFrame")
         heading.grid(row=0, column=0, sticky="ew", padx=28, pady=(22, 16))
-        ttk.Label(heading, text="查找冻存管空位", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(heading, text="输入所需管数，系统优先推荐能在同一冻存盒内连续放置的位置", style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
+        ui.TtkLabel(heading, text=msg('查找冻存管空位'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(heading, text=msg('输入所需管数，系统优先推荐能在同一冻存盒内连续放置的位置'), style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
 
         panel = self._panel(page)
         panel.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 16))
@@ -3540,30 +3580,30 @@ class FreezerManagerApp(tk.Tk):
         form.columnconfigure(2, weight=1)
 
         fields = (
-            ("所需冻存管数", self.empty_required_var, None),
-            ("查询范围", self.empty_scope_var, ("当前液氮罐", "全部液氮罐")),
-            ("排列方式", self.empty_arrangement_var, ("连续优先", "任意空位")),
+            (msg('所需冻存管数'), self.empty_required_var, None),
+            (msg('查询范围'), self.empty_scope_var, (msg('当前液氮罐'), msg('全部液氮罐'))),
+            (msg('排列方式'), self.empty_arrangement_var, (msg('连续优先'), msg('任意空位'))),
         )
         for column, (label, variable, choices) in enumerate(fields):
             cell = tk.Frame(form, bg=COLORS["panel"])
             cell.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 12, 0))
-            tk.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            ui.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
             if choices is None:
                 widget = ttk.Entry(cell, textvariable=variable, font=("Microsoft YaHei UI", 10))
                 _bind_ime_safe_return(widget, self.run_empty_search)
             else:
-                widget = ttk.Combobox(cell, textvariable=variable, values=choices, state="readonly", font=("Microsoft YaHei UI", 10))
+                widget = ui.Combobox(cell, textvariable=variable, values=choices, state="readonly", font=("Microsoft YaHei UI", 10))
             widget.pack(fill="x", ipady=3)
 
         actions = tk.Frame(form, bg=COLORS["panel"])
         actions.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(14, 0))
-        RoundedButton(actions, text="开始查找", command=self.run_empty_search, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=108, height=38, radius=10).pack(side="right")
-        tk.Label(actions, text="结果按：同盒容纳全部 → 连续空位 → 优先填充已使用冻存盒", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
+        RoundedButton(actions, text=msg('开始查找'), command=self.run_empty_search, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=108, height=38, radius=10).pack(side="right")
+        ui.Label(actions, text=msg('结果按：同盒容纳全部 → 连续空位 → 优先填充已使用冻存盒'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
 
         if not run_search:
             hint = self._panel(page)
             hint.grid(row=2, column=0, sticky="ew", padx=28, pady=(0, 24))
-            tk.Label(hint, text="例如输入 5，系统会优先寻找同一冻存盒中连续的5个空孔位。", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=28).pack()
+            ui.Label(hint, text=msg('例如输入 5，系统会优先寻找同一冻存盒中连续的5个空孔位。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=28).pack()
             return
 
         try:
@@ -3571,7 +3611,7 @@ class FreezerManagerApp(tk.Tk):
             if required < 1:
                 raise ValueError
         except ValueError:
-            self._notify("管数不正确", "所需冻存管数必须是大于0的整数。", danger=True)
+            self._notify(msg('管数不正确'), msg('所需冻存管数必须是大于0的整数。'), danger=True)
             return
         signature = (required, self.empty_scope_var.get(), self.empty_arrangement_var.get())
         if signature != self.empty_search_signature:
@@ -3579,8 +3619,8 @@ class FreezerManagerApp(tk.Tk):
             self.empty_search_signature = signature
         results = self.repository.find_empty_positions(
             required,
-            all_freezers=self.empty_scope_var.get() == "全部液氮罐",
-            continuous=self.empty_arrangement_var.get() == "连续优先",
+            all_freezers=self.empty_scope_var.get() == msg('全部液氮罐'),
+            continuous=self.empty_arrangement_var.get() == msg('连续优先'),
         )
         self._render_empty_search_results(page, results, required)
 
@@ -3591,14 +3631,14 @@ class FreezerManagerApp(tk.Tk):
         fitting = [item for item in results if item["fits"]]
         summary = self._panel(page)
         summary.grid(row=2, column=0, sticky="ew", padx=28, pady=(0, 14))
-        tk.Label(summary, text=f"找到 {len(fitting)} 个可一次容纳 {required} 管的冻存盒", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left", padx=18, pady=14)
+        ui.Label(summary, text=msg('找到 {0} 个可一次容纳 {1} 管的冻存盒', len(fitting), required), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left", padx=18, pady=14)
         if fitting:
-            tk.Label(summary, text="最推荐结果已排在最前", bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 8, "bold")).pack(side="right", padx=18)
+            ui.Label(summary, text=msg('最推荐结果已排在最前'), bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 8, "bold")).pack(side="right", padx=18)
 
         list_panel = self._panel(page)
         list_panel.grid(row=3, column=0, sticky="ew", padx=28, pady=(0, 24))
         if not fitting:
-            tk.Label(list_panel, text="没有单个冻存盒可以容纳所需管数。可以减少管数，或改为查询全部液氮罐。", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=32).pack()
+            ui.Label(list_panel, text=msg('没有单个冻存盒可以容纳所需管数。可以减少管数，或改为查询全部液氮罐。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=32).pack()
             return
         for index, item in enumerate(fitting[:30]):
             freezer_id = str(item["freezer_id"])
@@ -3612,17 +3652,17 @@ class FreezerManagerApp(tk.Tk):
                 highlightbackground=COLORS["primary"],
             )
             card.pack(fill="x", padx=18, pady=(13 if index == 0 else 0, 13))
-            rank = tk.Label(card, text="推荐" if index == 0 else str(index + 1), width=6, bg=COLORS["occupied"] if index == 0 else "#F4F7FB", fg=COLORS["occupied_text"] if index == 0 else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=6, pady=8)
+            rank = ui.Label(card, text=msg('推荐') if index == 0 else str(index + 1), width=6, bg=COLORS["occupied"] if index == 0 else "#F4F7FB", fg=COLORS["occupied_text"] if index == 0 else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=6, pady=8)
             rank.pack(side="left", padx=(0, 14))
             detail = tk.Frame(card, bg=card_bg)
             detail.pack(side="left", fill="x", expand=True)
             title_row = tk.Frame(detail, bg=card_bg)
             title_row.pack(fill="x")
-            tk.Label(title_row, text=f"{item['freezer_name']} · 细胞冻存盒 {code}", bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+            ui.Label(title_row, text=msg('{0} · 细胞冻存盒 {1}', item['freezer_name'], code), bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
             if opened:
-                tk.Label(
+                ui.Label(
                     title_row,
-                    text="已查看",
+                    text=msg('已查看'),
                     bg="#E7F0FF",
                     fg=COLORS["primary"],
                     font=("Microsoft YaHei UI", 8, "bold"),
@@ -3632,9 +3672,9 @@ class FreezerManagerApp(tk.Tk):
                     highlightbackground="#BFD4FF",
                 ).pack(side="left", padx=10)
             positions = list(item["recommended_positions"])
-            tk.Label(detail, text=f"推荐孔位：{compact_box_positions(positions)}", bg=card_bg, fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
-            tk.Label(detail, text=f"布局 {item['rows']}×{item['columns']} · 空余 {item['empty_count']} 管位 · 已使用 {item['occupied_count']} 管", bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
-            RoundedButton(card, text="再次打开" if opened else "使用推荐孔位", command=lambda fid=freezer_id, value=code, pos=positions: self.open_recommended_empty_positions(fid, value, pos), fill="#DCE8FF" if opened else COLORS["primary"], foreground=COLORS["primary"] if opened else "white", hover_fill="#CFE0FF" if opened else COLORS["primary_dark"], canvas_bg=card_bg, width=120, height=36, radius=9, font=("Microsoft YaHei UI", 8, "bold")).pack(side="right", padx=(16, 0))
+            ui.Label(detail, text=msg('推荐孔位：{0}', compact_box_positions(positions)), bg=card_bg, fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+            ui.Label(detail, text=msg('布局 {0}×{1} · 空余 {2} 管位 · 已使用 {3} 管', item['rows'], item['columns'], item['empty_count'], item['occupied_count']), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
+            RoundedButton(card, text=msg('再次打开') if opened else msg('使用推荐孔位'), command=lambda fid=freezer_id, value=code, pos=positions: self.open_recommended_empty_positions(fid, value, pos), fill="#DCE8FF" if opened else COLORS["primary"], foreground=COLORS["primary"] if opened else "white", hover_fill="#CFE0FF" if opened else COLORS["primary_dark"], canvas_bg=card_bg, width=120, height=36, radius=9, font=("Microsoft YaHei UI", 8, "bold")).pack(side="right", padx=(16, 0))
             if index < len(fitting[:30]) - 1:
                 tk.Frame(list_panel, height=1, bg=COLORS["line"]).pack(fill="x", padx=18)
 
@@ -3642,7 +3682,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.switch_freezer(freezer_id)
         except (OSError, ValueError) as exc:
-            self._notify("无法打开推荐位置", str(exc), danger=True)
+            self._notify(msg('无法打开推荐位置'), str(exc), danger=True)
             return
         self.pending_empty_recommendation = (freezer_id, code, list(positions))
         self.empty_opened_boxes.add((freezer_id, code))
@@ -3653,7 +3693,7 @@ class FreezerManagerApp(tk.Tk):
 
     def show_inventory_page(self) -> None:
         self._set_active_nav("inventory")
-        self.page_title_var.set("细胞库存 · 全部液氮罐")
+        self.page_title_var.set(msg('细胞库存 · 全部液氮罐'))
         self.clear_content()
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
@@ -3664,8 +3704,8 @@ class FreezerManagerApp(tk.Tk):
         heading.grid(row=0, column=0, sticky="ew", padx=28, pady=(22, 16))
         title_box = ttk.Frame(heading, style="Page.TFrame")
         title_box.pack(side="left")
-        ttk.Label(title_box, text="细胞库存目录", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text="快速发现低库存细胞；预警库存按已占用孔位（冻存管数）计算", style="PageMuted.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('细胞库存目录'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('快速发现低库存细胞；预警库存按已占用孔位（冻存管数）计算'), style="PageMuted.TLabel").pack(anchor="w")
 
         search_panel = self._panel(page)
         search_panel.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 16))
@@ -3674,8 +3714,8 @@ class FreezerManagerApp(tk.Tk):
         entry = tk.Entry(search_row, textvariable=self.inventory_query_var, relief="flat", bg="#F4F7FB", fg=COLORS["text"], insertbackground=COLORS["text"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["primary"], font=("Microsoft YaHei UI", 10))
         entry.pack(side="left", fill="x", expand=True, ipady=9)
         _bind_ime_safe_return(entry, self.show_inventory_page)
-        RoundedButton(search_row, text="筛选库存", command=self.show_inventory_page, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=105, height=40, radius=10).pack(side="left", padx=(10, 0))
-        RoundedButton(search_row, text="清除", command=self.clear_inventory_query, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=78, height=40, radius=10).pack(side="left", padx=(8, 0))
+        RoundedButton(search_row, text=msg('筛选库存'), command=self.show_inventory_page, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=105, height=40, radius=10).pack(side="left", padx=(10, 0))
+        RoundedButton(search_row, text=msg('清除'), command=self.clear_inventory_query, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=78, height=40, radius=10).pack(side="left", padx=(8, 0))
 
         all_items = self.repository.inventory_summary(self.inventory_query_var.get())
         for item in all_items:
@@ -3699,16 +3739,16 @@ class FreezerManagerApp(tk.Tk):
         stats = self._panel(page)
         stats.grid(row=2, column=0, sticky="ew", padx=28, pady=(0, 16))
         alert_cards = (
-            ("全部", "全部细胞", len(all_items), COLORS["primary"], COLORS["primary_soft"], "#DCE8FF"),
-            ("库存不足", "库存不足", alert_counts["low"], "#C93C3C", "#FDECEC", "#F8DADA"),
-            ("即将不足", "即将不足", alert_counts["warning"], "#B56A00", "#FFF3DA", "#FFE5AD"),
-            ("库存正常", "库存正常", alert_counts["normal"], COLORS["occupied_text"], COLORS["occupied"], "#D4EEE3"),
+            (msg('全部'), msg('全部细胞'), len(all_items), COLORS["primary"], COLORS["primary_soft"], "#DCE8FF"),
+            (msg('库存不足'), msg('库存不足'), alert_counts["low"], "#C93C3C", "#FDECEC", "#F8DADA"),
+            (msg('即将不足'), msg('即将不足'), alert_counts["warning"], "#B56A00", "#FFF3DA", "#FFE5AD"),
+            (msg('库存正常'), msg('库存正常'), alert_counts["normal"], COLORS["occupied_text"], COLORS["occupied"], "#D4EEE3"),
         )
         for status_filter, label, value, foreground, soft_color, soft_hover in alert_cards:
             active = self.inventory_status_var.get() == status_filter
             RoundedButton(
                 stats,
-                text=f"{value} 种\n{label}",
+                text=msg('{0} 种\n{1}', value, label),
                 command=lambda value=status_filter: self.set_inventory_status_filter(value),
                 fill=foreground if active else soft_color,
                 foreground="white" if active else foreground,
@@ -3723,16 +3763,16 @@ class FreezerManagerApp(tk.Tk):
         default_low, default_warning = self.repository.default_inventory_alert
         default_settings = tk.Frame(stats, bg=COLORS["panel"])
         default_settings.pack(side="right", padx=16, pady=10)
-        tk.Label(
+        ui.Label(
             default_settings,
-            text=f"默认：不足≤{default_low}管 / 提醒≤{default_warning}管",
+            text=msg('默认：不足≤{0}管 / 提醒≤{1}管', default_low, default_warning),
             bg=COLORS["panel"],
             fg=COLORS["muted"],
             font=("Microsoft YaHei UI", 8),
         ).pack(anchor="e", pady=(0, 5))
         RoundedButton(
             default_settings,
-            text="设置默认阈值",
+            text=msg('设置默认阈值'),
             command=self.configure_default_inventory_alert,
             fill="#E8EDF4",
             foreground=COLORS["text"],
@@ -3746,7 +3786,7 @@ class FreezerManagerApp(tk.Tk):
         ).pack(anchor="e")
 
         selected_status = self.inventory_status_var.get()
-        status_key_by_filter = {"库存不足": "low", "即将不足": "warning", "库存正常": "normal"}
+        status_key_by_filter = {msg('库存不足'): "low", msg('即将不足'): "warning", msg('库存正常'): "normal"}
         selected_key = status_key_by_filter.get(selected_status)
         items = [item for item in all_items if selected_key is None or item["alert_status"] == selected_key]
         status_rank = {"low": 0, "warning": 1, "normal": 2}
@@ -3756,51 +3796,51 @@ class FreezerManagerApp(tk.Tk):
         list_panel.grid(row=3, column=0, sticky="ew", padx=28, pady=(0, 24))
         list_heading = tk.Frame(list_panel, bg=COLORS["panel"])
         list_heading.pack(fill="x", padx=16, pady=(12, 10))
-        tk.Label(list_heading, text=f"{selected_status} · {len(items)} 种细胞", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
-        tk.Label(list_heading, text="列表已按预警级别和剩余管数排序", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
+        ui.Label(list_heading, text=msg('{0} · {1} 种细胞', msg(selected_status), len(items)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(list_heading, text=msg('列表已按预警级别和剩余管数排序'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
         inventory_grid = tk.Frame(list_panel, bg=COLORS["line"])
         inventory_grid.pack(fill="x")
         inventory_columns = (
-            ("细胞名称", 5, 170),
-            ("剩余管数", 2, 78),
-            ("预警阈值", 4, 175),
-            ("库存状态", 2, 88),
-            ("操作", 4, 178),
+            (msg('细胞名称'), 5, 170),
+            (msg('剩余管数'), 2, 78),
+            (msg('预警阈值'), 4, 175),
+            (msg('库存状态'), 2, 88),
+            (msg('操作'), 4, 178),
         )
         for column, (_text, weight, minimum) in enumerate(inventory_columns):
             inventory_grid.columnconfigure(column, weight=weight, minsize=minimum, uniform="inventory")
         for column, (text_value, _weight, _minimum) in enumerate(inventory_columns):
-            tk.Label(inventory_grid, text=text_value, anchor="w" if column < 2 else "center", bg="#F6F8FB", fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=12, pady=11).grid(row=0, column=column, sticky="nsew", padx=(0, 1) if column < len(inventory_columns) - 1 else 0, pady=(0, 1))
+            ui.Label(inventory_grid, text=text_value, anchor="w" if column < 2 else "center", bg="#F6F8FB", fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=12, pady=11).grid(row=0, column=column, sticky="nsew", padx=(0, 1) if column < len(inventory_columns) - 1 else 0, pady=(0, 1))
         if not items:
-            empty_text = "当前筛选条件下没有细胞库存。" if all_items else "暂无匹配的细胞库存。请打开一个细胞冻存盒并录入孔位数据。"
-            tk.Label(inventory_grid, text=empty_text, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=30).grid(row=1, column=0, columnspan=len(inventory_columns), sticky="ew")
+            empty_text = msg('当前筛选条件下没有细胞库存。') if all_items else msg('暂无匹配的细胞库存。请打开一个细胞冻存盒并录入孔位数据。')
+            ui.Label(inventory_grid, text=empty_text, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=30).grid(row=1, column=0, columnspan=len(inventory_columns), sticky="ew")
             return
         for row_index, item in enumerate(items, start=1):
             positions = list(item["positions"])
-            threshold_text = f"不足≤{item['alert_low']} / 提醒≤{item['alert_warning']}"
+            threshold_text = msg('不足≤{0} / 提醒≤{1}', item['alert_low'], item['alert_warning'])
             if not item["alert_configured"]:
-                threshold_text += "（默认）"
+                threshold_text += msg('（默认）')
             values = (
                 (str(item["sample_name"]), COLORS["text"], "bold"),
-                (f"{len(positions)} 管", str(item["alert_color"]), "bold"),
+                (msg('{0} 管', len(positions)), str(item["alert_color"]), "bold"),
                 (threshold_text, COLORS["muted"], "normal"),
-                (str(item["alert_text"]), str(item["alert_color"]), "bold"),
+                (item["alert_text"], str(item["alert_color"]), "bold"),
             )
             for column, (text_value, color, font_weight) in enumerate(values):
                 font_size = 8 if column == 2 else 9
-                tk.Label(inventory_grid, text=text_value, anchor="w" if column == 0 else "center", bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", font_size, font_weight), padx=12, pady=13).grid(row=row_index, column=column, sticky="nsew", padx=(0, 1), pady=(0, 1))
+                ui.Label(inventory_grid, text=text_value, anchor="w" if column == 0 else "center", bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", font_size, font_weight), padx=12, pady=13).grid(row=row_index, column=column, sticky="nsew", padx=(0, 1), pady=(0, 1))
             action_cell = tk.Frame(inventory_grid, bg=COLORS["panel"])
             action_cell.grid(row=row_index, column=4, sticky="nsew", pady=(0, 1))
-            RoundedButton(action_cell, text="设置预警", command=lambda name=str(item["sample_name"]): self.configure_inventory_alert(name), fill="#FFF3DA", foreground="#9A5B00", hover_fill="#FFE5AD", border="#FFF3DA", canvas_bg=COLORS["panel"], width=78, height=32, radius=8).pack(side="left", padx=(8, 4), pady=8)
-            RoundedButton(action_cell, text="查看位置", command=lambda name=str(item["sample_name"]): self.show_inventory_locations(name), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=78, height=32, radius=8).pack(side="left", padx=(4, 8), pady=8)
+            RoundedButton(action_cell, text=msg('设置预警'), command=lambda name=str(item["sample_name"]): self.configure_inventory_alert(name), fill="#FFF3DA", foreground="#9A5B00", hover_fill="#FFE5AD", border="#FFF3DA", canvas_bg=COLORS["panel"], width=78, height=32, radius=8).pack(side="left", padx=(8, 4), pady=8)
+            RoundedButton(action_cell, text=msg('查看位置'), command=lambda name=str(item["sample_name"]): self.show_inventory_locations(name), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=78, height=32, radius=8).pack(side="left", padx=(4, 8), pady=8)
 
     @staticmethod
     def _inventory_alert_status(tubes: int, low: int, warning: int) -> tuple[str, str, str, str]:
         if tubes <= low:
-            return "low", "库存不足", "#C93C3C", "#FDECEC"
+            return "low", msg('库存不足'), "#C93C3C", "#FDECEC"
         if tubes <= warning:
-            return "warning", "即将不足", "#B56A00", "#FFF3DA"
-        return "normal", "库存正常", COLORS["occupied_text"], COLORS["occupied"]
+            return "warning", msg('即将不足'), "#B56A00", "#FFF3DA"
+        return "normal", msg('库存正常'), COLORS["occupied_text"], COLORS["occupied"]
 
     def set_inventory_status_filter(self, status: str) -> None:
         self.inventory_status_var.set(status)
@@ -3814,19 +3854,19 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.set_inventory_alert(sample_name, *result)
         except (OSError, ValueError) as exc:
-            self._notify("预警设置失败", str(exc), danger=True)
+            self._notify(msg('预警设置失败'), str(exc), danger=True)
             return
         self.show_inventory_page()
 
     def configure_default_inventory_alert(self) -> None:
         low, warning = self.repository.default_inventory_alert
-        result = InventoryAlertDialog(self, "所有未单独设置的细胞", low, warning).show()
+        result = InventoryAlertDialog(self, msg('所有未单独设置的细胞'), low, warning).show()
         if result is None:
             return
         try:
             self.repository.set_default_inventory_alert(*result)
         except (OSError, ValueError) as exc:
-            self._notify("默认预警设置失败", str(exc), danger=True)
+            self._notify(msg('默认预警设置失败'), str(exc), danger=True)
             return
         self.show_inventory_page()
 
@@ -3837,24 +3877,24 @@ class FreezerManagerApp(tk.Tk):
     @staticmethod
     def _event_action_labels() -> dict[str, str]:
         return {
-            "IN": "入库",
-            "OUT": "出库",
-            "CLEAR": "清除",
-            "IN_MOVE": "入库（快捷移动）",
-            "IN_MOVE_UNDO": "入库（撤销移动）",
-            "ADJUST": "信息更正",
-            "HISTORY": "历史迁入",
+            "IN": msg('入库'),
+            "OUT": msg('出库'),
+            "CLEAR": msg('清除'),
+            "IN_MOVE": msg('入库（快捷移动）'),
+            "IN_MOVE_UNDO": msg('入库（撤销移动）'),
+            "ADJUST": msg('信息更正'),
+            "HISTORY": msg('历史迁入'),
         }
 
     def show_inventory_events_page(self) -> None:
         self._set_active_nav("events")
-        self.page_title_var.set("出入库登记")
+        self.page_title_var.set(msg('出入库登记'))
         self.clear_content()
         page = ttk.Frame(self.content, style="Page.TFrame", padding=(28, 24))
         page.pack(fill="both", expand=True)
 
-        ttk.Label(page, text="出入库登记", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(page, text="集中记录入库、出库、清除和快捷移动等实际库存操作。", style="PageMuted.TLabel").pack(anchor="w", pady=(4, 16))
+        ui.TtkLabel(page, text=msg('出入库登记'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(page, text=msg('集中记录入库、出库、清除和快捷移动等实际库存操作。'), style="PageMuted.TLabel").pack(anchor="w", pady=(4, 16))
 
         action_totals = self.repository.inventory_event_action_counts()
         action_counts = {
@@ -3866,46 +3906,38 @@ class FreezerManagerApp(tk.Tk):
         cards = tk.Frame(page, bg=COLORS["bg"])
         cards.pack(fill="x", pady=(0, 14))
         for index, (label, value, color) in enumerate((
-            ("全部登记", all_event_count, COLORS["primary"]),
-            ("入库", action_counts["IN"], COLORS["occupied_text"]),
-            ("出库", action_counts["OUT"], "#B86613"),
-            ("清除", action_counts["CLEAR"], COLORS["danger"]),
+            (msg('全部登记'), all_event_count, COLORS["primary"]),
+            (msg('入库'), action_counts["IN"], COLORS["occupied_text"]),
+            (msg('出库'), action_counts["OUT"], "#B86613"),
+            (msg('清除'), action_counts["CLEAR"], COLORS["danger"]),
         )):
             cards.columnconfigure(index, weight=1)
             card = self._panel(cards)
             card.grid(row=0, column=index, sticky="ew", padx=(0 if index == 0 else 8, 0))
-            tk.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=15, pady=(12, 2))
-            tk.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 17, "bold")).pack(anchor="w", padx=15, pady=(0, 12))
+            ui.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=15, pady=(12, 2))
+            ui.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 17, "bold")).pack(anchor="w", padx=15, pady=(0, 12))
 
         filter_panel = self._panel(page)
         filter_panel.pack(fill="x", pady=(0, 14))
         form = tk.Frame(filter_panel, bg=COLORS["panel"])
         form.pack(fill="x", padx=18, pady=16)
-        # Date fields contain an entry plus a calendar action, so equal-width
-        # columns make them visibly cramped.  Reserve more room for both date
-        # ranges while keeping the compact filters usable at the 1000px
-        # minimum application width.
-        for column, (weight, minimum) in enumerate((
-            (9, 140),
-            (9, 140),
-            (11, 165),
-            (13, 195),
-            (13, 195),
-        )):
-            form.columnconfigure(column, weight=weight, minsize=minimum)
+        # Two rows leave room for English labels and calendar controls even
+        # at the minimum window width, without rebuilding on language change.
+        for column in range(3):
+            form.columnconfigure(column, weight=1, uniform='filters')
         action_labels = self._event_action_labels()
-        freezer_options = ("全部液氮罐", *(name for _freezer_id, name in self.repository.list_freezers(include_archived=True)))
+        freezer_options = (msg('全部液氮罐'), *(name for _freezer_id, name in self.repository.list_freezers(include_archived=True)))
         fields: tuple[tuple[str, tk.StringVar, str, tuple[str, ...] | None], ...] = (
-            ("关键词", self.event_query_var, "细胞、人员或位置", None),
-            ("操作类型", self.event_action_var, "", ()),
-            ("液氮罐", self.event_freezer_var, "", freezer_options),
-            ("日期从", self.event_date_from_var, "YYYY-MM-DD", None),
-            ("日期至", self.event_date_to_var, "YYYY-MM-DD", None),
+            (msg('关键词'), self.event_query_var, msg('细胞、人员或位置'), None),
+            (msg('操作类型'), self.event_action_var, "", ()),
+            (msg('液氮罐'), self.event_freezer_var, "", freezer_options),
+            (msg('日期从'), self.event_date_from_var, "YYYY-MM-DD", None),
+            (msg('日期至'), self.event_date_to_var, "YYYY-MM-DD", None),
         )
         for column, (label, variable, hint, options) in enumerate(fields):
             cell = tk.Frame(form, bg=COLORS["panel"])
-            cell.grid(row=0, column=column, sticky="new", padx=5)
-            tk.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+            cell.grid(row=column // 3, column=column % 3, sticky="new", padx=5, pady=(0, 8))
+            ui.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
             if column == 1:
                 MultiSelectDropdown(
                     cell,
@@ -3928,14 +3960,14 @@ class FreezerManagerApp(tk.Tk):
                 entry.pack(fill="x")
                 _bind_ime_safe_return(entry, self.show_inventory_events_page)
             else:
-                ttk.Combobox(cell, textvariable=variable, values=options, state="readonly", font=("Microsoft YaHei UI", 9)).pack(fill="x")
+                ui.Combobox(cell, textvariable=variable, values=options, state="readonly", font=("Microsoft YaHei UI", 9)).pack(fill="x")
             if hint:
-                tk.Label(cell, text=hint, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 7)).pack(anchor="w", pady=(3, 0))
+                ui.Label(cell, text=hint, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 7)).pack(anchor="w", pady=(3, 0))
         actions = tk.Frame(filter_panel, bg=COLORS["panel"])
         actions.pack(fill="x", padx=18, pady=(0, 14))
-        RoundedButton(actions, text="应用筛选", command=self.show_inventory_events_page, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=100, height=36, radius=9).pack(side="left")
-        RoundedButton(actions, text="重置", command=self.reset_inventory_event_filters, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=82, height=36, radius=9).pack(side="left", padx=8)
-        RoundedButton(actions, text="导出出入库", command=self.export_inventory_events_to_excel, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=108, height=36, radius=9).pack(side="right")
+        RoundedButton(actions, text=msg('应用筛选'), command=self.show_inventory_events_page, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=100, height=36, radius=9).pack(side="left")
+        RoundedButton(actions, text=msg('重置'), command=self.reset_inventory_event_filters, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=82, height=36, radius=9).pack(side="left", padx=8)
+        RoundedButton(actions, text=msg('导出出入库'), command=self.export_inventory_events_to_excel, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=108, height=36, radius=9).pack(side="right")
 
         selected_freezer_id = next((freezer_id for freezer_id, name in self.repository.list_freezers(include_archived=True) if name == self.event_freezer_var.get()), "")
         event_filter = {
@@ -3955,23 +3987,23 @@ class FreezerManagerApp(tk.Tk):
         list_panel.pack(fill="both", expand=True, pady=(0, 4))
         list_header = tk.Frame(list_panel, bg=COLORS["panel"])
         list_header.pack(fill="x", padx=16, pady=(12, 9))
-        tk.Label(list_header, text=f"登记记录 · {event_count} 条", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(list_header, text=msg('登记记录 · {0} 条', event_count), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         if event_count > 300:
-            tk.Label(list_header, text="当前显示最近 300 条，请使用筛选缩小范围", bg=COLORS["panel"], fg="#B56A00", font=("Microsoft YaHei UI", 8)).pack(side="right")
+            ui.Label(list_header, text=msg('当前显示最近 300 条，请使用筛选缩小范围'), bg=COLORS["panel"], fg="#B56A00", font=("Microsoft YaHei UI", 8)).pack(side="right")
 
         table_host = tk.Frame(list_panel, bg=COLORS["panel"])
         table_host.pack(fill="both", expand=True, padx=1, pady=(0, 1))
         table_host.rowconfigure(0, weight=1)
         table_host.columnconfigure(0, weight=1)
         column_specs = (
-            ("action", "操作", 104, "center"),
-            ("sample", "细胞名称", 170, "w"),
-            ("location", "位置", 260, "w"),
-            ("operator", "人员", 90, "center"),
-            ("business_date", "业务日期", 100, "center"),
-            ("created_at", "系统时间", 145, "center"),
+            ("action", msg('操作'), 174, "center"),
+            ("sample", msg('细胞名称'), 170, "w"),
+            ("location", msg('位置'), 260, "w"),
+            ("operator", msg('人员'), 90, "center"),
+            ("business_date", msg('业务日期'), 140, "center"),
+            ("created_at", msg('系统时间'), 145, "center"),
         )
-        tree = ttk.Treeview(
+        tree = ui.Treeview(
             table_host,
             columns=tuple(spec[0] for spec in column_specs),
             show="headings",
@@ -3993,10 +4025,10 @@ class FreezerManagerApp(tk.Tk):
         tree.tag_configure("clear", foreground=COLORS["danger"])
         tree.tag_configure("history", foreground=COLORS["muted"])
         for event in events:
-            source = f"{event.freezer_name} / {event.unit_code}/{event.position}"
+            source = msg('{0} / {1}/{2}', event.freezer_name, event.unit_code, event.position)
             location = source
             if event.target_position:
-                location += f" → {event.target_unit_code or event.unit_code}/{event.target_position}"
+                location += msg(' → {0}/{1}', event.target_unit_code or event.unit_code, event.target_position)
             values = (
                 action_labels.get(event.action, event.action),
                 event.sample_name or "—",
@@ -4015,14 +4047,14 @@ class FreezerManagerApp(tk.Tk):
                 tag = "history"
             tree.insert("", "end", values=values, tags=(tag,))
         if not events:
-            tree.insert("", "end", values=("", "没有符合当前条件的出入库记录。", "", "", "", ""), tags=("history",))
+            tree.insert("", "end", values=("", msg('没有符合当前条件的出入库记录。'), "", "", "", ""), tags=("history",))
 
     def reset_inventory_event_filters(self) -> None:
         self.event_query_var.set("")
         self.event_action_filters.clear()
         self.event_action_filters.update(self._event_action_labels())
-        self.event_action_var.set("全部操作")
-        self.event_freezer_var.set("全部液氮罐")
+        self.event_action_var.set(msg('全部操作'))
+        self.event_freezer_var.set(msg('全部液氮罐'))
         self.event_date_from_var.set("")
         self.event_date_to_var.set("")
         self.show_inventory_events_page()
@@ -4039,29 +4071,29 @@ class FreezerManagerApp(tk.Tk):
         )
         if not events:
             self._notify(
-                "没有可导出的出入库记录",
-                f"{date_from} 至 {date_to} 没有普通入库或出库记录。",
+                msg('没有可导出的出入库记录'),
+                msg('{0} 至 {1} 没有普通入库或出库记录。', date_from, date_to),
                 danger=True,
             )
             return
-        selected = filedialog.asksaveasfilename(
+        selected = ui.asksaveasfilename(
             parent=self,
-            title="导出出入库登记",
+            title=msg('导出出入库登记'),
             initialdir=str(Path(__file__).parent),
-            initialfile=f"出入库登记_{date_from.replace('-', '')}-{date_to.replace('-', '')}.xlsx",
+            initialfile=msg('出入库登记_{0}-{1}.xlsx', date_from.replace('-', ''), date_to.replace('-', '')),
             defaultextension=".xlsx",
-            filetypes=(("Excel 工作簿", "*.xlsx"),),
+            filetypes=((msg('Excel 工作簿'), "*.xlsx"),),
         )
         if not selected:
             return
         try:
-            export_inventory_events_workbook(Path(selected), events)
+            export_inventory_events_workbook(Path(selected), events, language=self.language_state.language)
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
-            self._notify("导出失败", f"无法生成出入库登记 Excel：\n{exc}", danger=True)
+            self._notify(msg('导出失败'), msg('无法生成出入库登记 Excel：\n{0}', exc), danger=True)
             return
         self._notify(
-            "出入库登记导出完成",
-            f"已导出 {date_from} 至 {date_to} 的入库、出库记录 {len(events)} 条。\n\n文件：{Path(selected).name}",
+            msg('出入库登记导出完成'),
+            msg('已导出 {0} 至 {1} 的入库、出库记录 {2} 条。\n\n文件：{3}', date_from, date_to, len(events), Path(selected).name),
         )
 
     def show_inventory_locations(self, sample_name: str) -> None:
@@ -4070,7 +4102,7 @@ class FreezerManagerApp(tk.Tk):
         self.inventory_location_sample_name = sample_name
         locations = self.repository.inventory_locations(sample_name)
         if not locations:
-            self._notify("未找到存放位置", "该细胞目前没有可用的盒内位置记录。", danger=True)
+            self._notify(msg('未找到存放位置'), msg('该细胞目前没有可用的盒内位置记录。'), danger=True)
             return
         InventoryLocationsDialog(self, sample_name, locations).show()
 
@@ -4094,7 +4126,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.switch_freezer(freezer_id)
         except (OSError, ValueError) as exc:
-            self._notify("无法打开位置", str(exc), danger=True)
+            self._notify(msg('无法打开位置'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self._update_sidebar_summary()
@@ -4113,7 +4145,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.switch_freezer(freezer_id)
         except (OSError, ValueError) as exc:
-            self._notify("无法打开位置", str(exc), danger=True)
+            self._notify(msg('无法打开位置'), str(exc), danger=True)
             return
         self._refresh_freezer_selector()
         self._update_sidebar_summary()
@@ -4123,37 +4155,37 @@ class FreezerManagerApp(tk.Tk):
 
     def show_search_page(self) -> None:
         self._set_active_nav("search")
-        self.page_title_var.set("查找细胞 · 全部液氮罐")
+        self.page_title_var.set(msg('查找细胞 · 全部液氮罐'))
         self.clear_content()
         page = ttk.Frame(self.content, style="Page.TFrame", padding=(28, 26))
         page.pack(fill="both", expand=True)
-        ttk.Label(page, text="查找细胞", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(page, text="搜索范围：全部未归档液氮罐", style="PageMuted.TLabel").pack(anchor="w", pady=(4, 18))
+        ui.TtkLabel(page, text=msg('查找细胞'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(page, text=msg('搜索范围：全部未归档液氮罐'), style="PageMuted.TLabel").pack(anchor="w", pady=(4, 18))
         panel = self._panel(page)
         panel.pack(fill="x")
         inside = tk.Frame(panel, bg=COLORS["panel"])
         inside.pack(fill="x", padx=24, pady=24)
-        tk.Label(inside, text="输入盒位、孔位、细胞名称、类别、入库人或备注", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(0, 9))
+        ui.Label(inside, text=msg('输入盒位、孔位、细胞名称、类别、入库人或备注'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(0, 9))
         search_row = tk.Frame(inside, bg=COLORS["panel"])
         search_row.pack(fill="x")
         self.search_entry = tk.Entry(search_row, textvariable=self.search_var, relief="flat", bg="#F4F7FB", fg=COLORS["text"], insertbackground=COLORS["text"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["primary"], font=("Microsoft YaHei UI", 11))
         self.search_entry.pack(side="left", fill="x", expand=True, ipady=10)
         _bind_ime_safe_return(self.search_entry, self.show_search_results)
-        RoundedButton(search_row, text="开始搜索", command=self.show_search_results, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=112, height=43, radius=11).pack(side="left", padx=(12, 0))
-        RoundedButton(search_row, text="高级搜索", command=self.show_advanced_search_page, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=112, height=43, radius=11).pack(side="left", padx=(9, 0))
-        tk.Label(inside, text="例如：11、11/A1、HEK293T、细胞类别或入库人姓名", bg=COLORS["panel"], fg="#98A4B5", font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(8, 0))
+        RoundedButton(search_row, text=msg('开始搜索'), command=self.show_search_results, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=112, height=43, radius=11).pack(side="left", padx=(12, 0))
+        RoundedButton(search_row, text=msg('高级搜索'), command=self.show_advanced_search_page, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=112, height=43, radius=11).pack(side="left", padx=(9, 0))
+        ui.Label(inside, text=msg('例如：11、11/A1、HEK293T、细胞类别或入库人姓名'), bg=COLORS["panel"], fg="#98A4B5", font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(8, 0))
         self.after(80, lambda widget=self.search_entry: self._focus_if_exists(widget))
 
     def show_advanced_search_page(self, *, run_search: bool = False) -> None:
         self._set_active_nav("search")
-        self.page_title_var.set(f"高级查找 · {self.repository.freezer_name}")
+        self.page_title_var.set(msg('高级查找 · {0}', self.repository.freezer_name))
         self.clear_content()
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
         page = ttk.Frame(scroll.body, style="Page.TFrame", padding=(28, 24))
         page.pack(fill="both", expand=True)
-        ttk.Label(page, text="高级查找与批量操作", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(page, text=f"当前范围：{self.repository.freezer_name}。可筛选有细胞或空闲冻存盒。", style="PageMuted.TLabel").pack(anchor="w", pady=(4, 16))
+        ui.TtkLabel(page, text=msg('高级查找与批量操作'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(page, text=msg('当前范围：{0}。可筛选有细胞或空闲冻存盒。', self.repository.freezer_name), style="PageMuted.TLabel").pack(anchor="w", pady=(4, 16))
 
         panel = self._panel(page)
         panel.pack(fill="x", pady=(0, 14))
@@ -4162,28 +4194,28 @@ class FreezerManagerApp(tk.Tk):
         for column in range(3):
             form.columnconfigure(column, weight=1)
         fields = (
-            ("关键词", self.search_var, "盒位、孔位、名称、类别、人员或备注"),
-            ("细胞类别", self.filter_sample_type_var, "如：肿瘤细胞"),
-            ("入库人", self.filter_stored_by_var, "姓名"),
-            ("入库日期从", self.filter_date_from_var, "YYYY-MM-DD"),
-            ("入库日期至", self.filter_date_to_var, "YYYY-MM-DD"),
+            (msg('关键词'), self.search_var, msg('盒位、孔位、名称、类别、人员或备注')),
+            (msg('细胞类别'), self.filter_sample_type_var, msg('如：肿瘤细胞')),
+            (msg('入库人'), self.filter_stored_by_var, msg('姓名')),
+            (msg('入库日期从'), self.filter_date_from_var, "YYYY-MM-DD"),
+            (msg('入库日期至'), self.filter_date_to_var, "YYYY-MM-DD"),
         )
         for index, (label, variable, hint) in enumerate(fields):
             row, column = divmod(index, 3)
             cell = tk.Frame(form, bg=COLORS["panel"])
             cell.grid(row=row * 2, column=column, sticky="ew", padx=(0 if column == 0 else 12, 0), pady=(0, 10))
-            tk.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
+            ui.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
             entry = ttk.Entry(cell, textvariable=variable, font=("Microsoft YaHei UI", 9))
             entry.pack(fill="x")
             _bind_ime_safe_return(entry, self.run_advanced_search)
         status_cell = tk.Frame(form, bg=COLORS["panel"])
         status_cell.grid(row=2, column=2, sticky="ew", padx=(12, 0), pady=(0, 10))
-        tk.Label(status_cell, text="冻存盒状态", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
-        ttk.Combobox(status_cell, textvariable=self.filter_status_var, values=("有细胞", "空冻存盒"), state="readonly", font=("Microsoft YaHei UI", 9)).pack(fill="x")
+        ui.Label(status_cell, text=msg('冻存盒状态'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 5))
+        ui.Combobox(status_cell, textvariable=self.filter_status_var, values=(msg('有细胞'), msg('空冻存盒')), state="readonly", font=("Microsoft YaHei UI", 9)).pack(fill="x")
         action_row = tk.Frame(form, bg=COLORS["panel"])
         action_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        RoundedButton(action_row, text="应用筛选", command=self.run_advanced_search, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=108, height=38, radius=10).pack(side="left")
-        RoundedButton(action_row, text="重置条件", command=self.reset_search_filters, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=102, height=38, radius=10).pack(side="left", padx=9)
+        RoundedButton(action_row, text=msg('应用筛选'), command=self.run_advanced_search, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=108, height=38, radius=10).pack(side="left")
+        RoundedButton(action_row, text=msg('重置条件'), command=self.reset_search_filters, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=102, height=38, radius=10).pack(side="left", padx=9)
 
         if not run_search:
             self.current_filter_results = []
@@ -4191,9 +4223,9 @@ class FreezerManagerApp(tk.Tk):
             self.result_selection = {}
             waiting_panel = self._panel(page)
             waiting_panel.pack(fill="x")
-            tk.Label(
+            ui.Label(
                 waiting_panel,
-                text="请设置检索条件，然后点击“应用筛选”或按 Enter 查看结果。",
+                text=msg('请设置检索条件，然后点击“应用筛选”或按 Enter 查看结果。'),
                 bg=COLORS["panel"],
                 fg=COLORS["muted"],
                 font=("Microsoft YaHei UI", 10),
@@ -4201,7 +4233,7 @@ class FreezerManagerApp(tk.Tk):
             ).pack()
             return
 
-        occupied_search = self.filter_status_var.get() != "空冻存盒"
+        occupied_search = self.filter_status_var.get() != msg('空冻存盒')
         advanced_results = self.repository.advanced_box_search(
             self.search_var.get(),
             sample_type=self.filter_sample_type_var.get(),
@@ -4217,29 +4249,29 @@ class FreezerManagerApp(tk.Tk):
         result_panel.pack(fill="both", expand=True)
         toolbar = tk.Frame(result_panel, bg=COLORS["panel"])
         toolbar.pack(fill="x", padx=18, pady=(14, 8))
-        tk.Label(toolbar, text=f"筛选结果：{len(advanced_results)} 个冻存盒", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
-        RoundedButton(toolbar, text="全选 / 取消", command=self.toggle_all_results, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=104, height=34, radius=9).pack(side="right")
-        RoundedButton(toolbar, text="导出选中", command=self.batch_export_selected, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right", padx=7)
-        RoundedButton(toolbar, text="批量移动", command=self.batch_move_selected, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right")
-        RoundedButton(toolbar, text="批量清空", command=self.batch_clear_selected, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right", padx=7)
+        ui.Label(toolbar, text=msg('筛选结果：{0} 个冻存盒', len(advanced_results)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+        RoundedButton(toolbar, text=msg('全选 / 取消'), command=self.toggle_all_results, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=104, height=34, radius=9).pack(side="right")
+        RoundedButton(toolbar, text=msg('导出选中'), command=self.batch_export_selected, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right", padx=7)
+        RoundedButton(toolbar, text=msg('批量移动'), command=self.batch_move_selected, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right")
+        RoundedButton(toolbar, text=msg('批量清空'), command=self.batch_clear_selected, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=96, height=34, radius=9).pack(side="right", padx=7)
         if not advanced_results:
-            empty_text = "没有符合条件的冻存盒或细胞。"
+            empty_text = msg('没有符合条件的冻存盒或细胞。')
             if not occupied_search and any(value.strip() for value in (self.filter_sample_type_var.get(), self.filter_stored_by_var.get(), self.filter_date_from_var.get(), self.filter_date_to_var.get())):
-                empty_text = "空冻存盒没有细胞类别、入库人或入库日期信息，请清除这些条件后重试。"
-            tk.Label(result_panel, text=empty_text, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=26).pack()
+                empty_text = msg('空冻存盒没有细胞类别、入库人或入库日期信息，请清除这些条件后重试。')
+            ui.Label(result_panel, text=empty_text, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 10), pady=26).pack()
         for result in advanced_results:
             self._render_advanced_box_result(result_panel, result, occupied_search)
 
     def _render_box_search_result(self, parent: tk.Misc, freezer_id: str, freezer_name: str, code: str, position: str, sample: BoxSample) -> None:
         item = tk.Frame(parent, bg=COLORS["panel"])
         item.pack(fill="x", padx=18, pady=7)
-        tk.Label(item, text=f"{code}/{position}", width=12, anchor="w", bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(item, text=msg('{0}/{1}', code, position), width=12, anchor="w", bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         detail = tk.Frame(item, bg=COLORS["panel"])
         detail.pack(side="left", fill="x", expand=True)
-        tk.Label(detail, text=sample.sample_name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
-        subtitle = " · ".join(value for value in (sample.sample_type, sample.stored_by, sample.stored_date) if value)
-        tk.Label(detail, text=f"{freezer_name} · 细胞冻存盒 {code}" + (f" · {subtitle}" if subtitle else ""), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
-        RoundedButton(item, text="打开盒子", command=lambda: self.open_inventory_location(freezer_id, code, (position,), return_mode="basic"), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=30, radius=8, font=("Microsoft YaHei UI", 8)).pack(side="right")
+        ui.Label(detail, text=sample.sample_name, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
+        subtitle = join_text(' · ', (value for value in (sample.sample_type, sample.stored_by, sample.stored_date) if value))
+        ui.Label(detail, text=msg('{0} · 细胞冻存盒 {1}', freezer_name, code) + (msg(' · {0}', subtitle) if subtitle else ""), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
+        RoundedButton(item, text=msg('打开盒子'), command=lambda: self.open_inventory_location(freezer_id, code, (position,), return_mode="basic"), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=30, radius=8, font=("Microsoft YaHei UI", 8)).pack(side="right")
 
     def _render_advanced_box_result(self, parent: tk.Misc, result: dict[str, object], occupied: bool) -> None:
         code = str(result["code"])
@@ -4248,24 +4280,24 @@ class FreezerManagerApp(tk.Tk):
         card = tk.Frame(parent, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
         card.pack(fill="x", padx=18, pady=7)
         card.columnconfigure(1, weight=1)
-        tk.Checkbutton(card, variable=self.result_selection[code], bg=COLORS["panel"], activebackground=COLORS["panel"], highlightthickness=0).grid(row=0, column=0, sticky="w", padx=(12, 4), pady=16)
+        ui.Checkbutton(card, variable=self.result_selection[code], bg=COLORS["panel"], activebackground=COLORS["panel"], highlightthickness=0).grid(row=0, column=0, sticky="w", padx=(12, 4), pady=16)
         detail = tk.Frame(card, bg=COLORS["panel"])
         detail.grid(row=0, column=1, sticky="ew", padx=(4, 16), pady=12)
-        tk.Label(detail, text=f"细胞冻存盒 {code}", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
+        ui.Label(detail, text=msg('细胞冻存盒 {0}', code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
         if occupied:
             names: list[str] = []
             for sample in samples:
                 if sample.sample_name not in names:
                     names.append(sample.sample_name)
-            preview = "、".join(names[:5]) + (f" 等 {len(names)} 种" if len(names) > 5 else "")
-            tk.Label(detail, text=f"匹配孔位 {compact_box_positions(positions)}  ·  {len(positions)} 支冻存管", bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
-            tk.Label(detail, text=f"细胞：{preview}", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
+            preview = join_text('、', names[:5]) + (msg(' 等 {0} 种', len(names)) if len(names) > 5 else "")
+            ui.Label(detail, text=msg('匹配孔位 {0}  ·  {1} 支冻存管', compact_box_positions(positions), len(positions)), bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+            ui.Label(detail, text=msg('细胞：{0}', preview), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
         else:
             layout = self.repository.get_box_layout(code)
-            tk.Label(detail, text=f"空冻存盒  ·  {layout.rows}×{layout.columns}  ·  可用 {layout.rows * layout.columns} 个孔位", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+            ui.Label(detail, text=msg('空冻存盒  ·  {0}×{1}  ·  可用 {2} 个孔位', layout.rows, layout.columns, layout.rows * layout.columns), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
         RoundedButton(
             card,
-            text="打开盒子",
+            text=msg('打开盒子'),
             command=lambda values=tuple(positions): self.open_inventory_location(self.repository.current_freezer_id, code, values, return_mode="advanced"),
             fill=COLORS["primary_soft"],
             foreground=COLORS["primary"],
@@ -4300,7 +4332,7 @@ class FreezerManagerApp(tk.Tk):
         for sample in samples:
             if sample.sample_name not in names:
                 names.append(sample.sample_name)
-        name_preview = "、".join(names[:4]) + (f" 等 {len(names)} 种" if len(names) > 4 else "")
+        name_preview = join_text('、', names[:4]) + (msg(' 等 {0} 种', len(names)) if len(names) > 4 else "")
         opened = (freezer_id, code) in self.search_opened_boxes
         card_bg = COLORS["primary_soft"] if opened else COLORS["panel"]
         card = tk.Frame(
@@ -4314,11 +4346,11 @@ class FreezerManagerApp(tk.Tk):
         detail.pack(side="left", fill="x", expand=True, padx=16, pady=12)
         title_row = tk.Frame(detail, bg=card_bg)
         title_row.pack(fill="x")
-        tk.Label(title_row, text=f"细胞冻存盒 {code}", bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        ui.Label(title_row, text=msg('细胞冻存盒 {0}', code), bg=card_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         if opened:
-            tk.Label(
+            ui.Label(
                 title_row,
-                text="已查看",
+                text=msg('已查看'),
                 bg="#E7F0FF",
                 fg=COLORS["primary"],
                 font=("Microsoft YaHei UI", 8, "bold"),
@@ -4327,9 +4359,9 @@ class FreezerManagerApp(tk.Tk):
                 highlightthickness=1,
                 highlightbackground="#BFD4FF",
             ).pack(side="left", padx=10)
-        tk.Label(detail, text=f"匹配孔位 {compact_box_positions(positions)}  ·  {len(positions)} 支冻存管", bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
-        tk.Label(detail, text=f"{freezer_name}  ·  细胞：{name_preview}", bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
-        RoundedButton(card, text="再次打开" if opened else "打开盒子", command=lambda values=tuple(str(position) for position in positions): self.open_inventory_location(freezer_id, code, values, return_mode="basic"), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=92, height=34, radius=9, font=("Microsoft YaHei UI", 8)).pack(side="right", padx=16, pady=16)
+        ui.Label(detail, text=msg('匹配孔位 {0}  ·  {1} 支冻存管', compact_box_positions(positions), len(positions)), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+        ui.Label(detail, text=msg('{0}  ·  细胞：{1}', freezer_name, name_preview), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
+        RoundedButton(card, text=msg('再次打开') if opened else msg('打开盒子'), command=lambda values=tuple(str(position) for position in positions): self.open_inventory_location(freezer_id, code, values, return_mode="basic"), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=92, height=34, radius=9, font=("Microsoft YaHei UI", 8)).pack(side="right", padx=16, pady=16)
 
     def run_advanced_search(self) -> None:
         self.show_advanced_search_page(run_search=True)
@@ -4337,7 +4369,7 @@ class FreezerManagerApp(tk.Tk):
     def reset_search_filters(self) -> None:
         for variable in (self.search_var, self.filter_sample_type_var, self.filter_stored_by_var, self.filter_date_from_var, self.filter_date_to_var):
             variable.set("")
-        self.filter_status_var.set("有细胞")
+        self.filter_status_var.set(msg('有细胞'))
         self.show_advanced_search_page()
 
     def toggle_all_results(self) -> None:
@@ -4350,7 +4382,7 @@ class FreezerManagerApp(tk.Tk):
         if occupied_only:
             selected = [code for code in selected if self.repository.box_has_samples(code)]
         if not selected:
-            self._notify("尚未选择", "请先勾选至少一个符合条件的冻存盒。", danger=True)
+            self._notify(msg('尚未选择'), msg('请先勾选至少一个符合条件的冻存盒。'), danger=True)
         return selected
 
     def batch_clear_selected(self) -> None:
@@ -4358,18 +4390,18 @@ class FreezerManagerApp(tk.Tk):
         if not codes:
             return
         tube_count = sum(len(self.repository.get_box_samples(code)) for code in codes)
-        if not self._ask_confirm("确认批量清空冻存盒", f"确定清空选中的 {len(codes)} 个冻存盒吗？\n盒内共 {tube_count} 支冻存管。执行前会自动创建备份。", danger=True):
+        if not self._ask_confirm(msg('确认批量清空冻存盒'), msg('确定清空选中的 {0} 个冻存盒吗？\n盒内共 {1} 支冻存管。执行前会自动创建备份。', len(codes), tube_count), danger=True):
             return
-        if not self._ask_confirm("再次确认清除", "第二次确认：这些冻存管将从当前库存中清除，操作会写入出入库登记。\n\n确定继续吗？", danger=True):
+        if not self._ask_confirm(msg('再次确认清除'), msg('第二次确认：这些冻存管将从当前库存中清除，操作会写入出入库登记。\n\n确定继续吗？'), danger=True):
             return
         try:
-            self.repository.create_backup("高级检索批量清空前")
+            self.repository.create_backup(msg('高级检索批量清空前'))
             removed_boxes, removed_tubes = self.repository.clear_boxes(codes)
         except (OSError, ValueError) as exc:
-            self._notify("批量清空失败", str(exc), danger=True)
+            self._notify(msg('批量清空失败'), str(exc), danger=True)
             return
         self._update_sidebar_summary()
-        self._notify("批量清空完成", f"已清空 {removed_boxes} 个冻存盒，共移除 {removed_tubes} 支冻存管。")
+        self._notify(msg('批量清空完成'), msg('已清空 {0} 个冻存盒，共移除 {1} 支冻存管。', removed_boxes, removed_tubes))
         self.show_advanced_search_page(run_search=True)
 
     def batch_move_selected(self) -> None:
@@ -4381,23 +4413,23 @@ class FreezerManagerApp(tk.Tk):
             return
         target_id, target_codes = result
         try:
-            self.repository.create_backup("高级检索冻存盒批量移动前")
+            self.repository.create_backup(msg('高级检索冻存盒批量移动前'))
             mappings = self.repository.move_boxes(codes, target_id, target_codes)
         except (OSError, ValueError) as exc:
-            self._notify("移动失败", str(exc), danger=True)
+            self._notify(msg('移动失败'), str(exc), danger=True)
             return
-        preview = "、".join(f"{source}→{target}" for source, target in mappings[:6])
+        preview = join_text('、', (msg('{0}→{1}', source, target) for source, target in mappings[:6]))
         if len(mappings) > 6:
             preview += "……"
         self._update_sidebar_summary()
-        self._notify("批量移动完成", f"已移动 {len(mappings)} 个冻存盒。\n{preview}")
+        self._notify(msg('批量移动完成'), msg('已移动 {0} 个冻存盒。\n{1}', len(mappings), preview))
         self.show_advanced_search_page(run_search=True)
 
     def batch_export_selected(self) -> None:
         codes = self._selected_result_codes()
         if not codes:
             return
-        selected = filedialog.asksaveasfilename(parent=self, title="导出选中记录", initialdir=str(Path(__file__).parent), initialfile=f"{self.repository.freezer_name}_筛选结果.xlsx", defaultextension=".xlsx", filetypes=(("Excel 工作簿", "*.xlsx"),))
+        selected = ui.asksaveasfilename(parent=self, title=msg('导出选中记录'), initialdir=str(Path(__file__).parent), initialfile=msg('{0}_筛选结果.xlsx', self.repository.freezer_name), defaultextension=".xlsx", filetypes=((msg('Excel 工作簿'), "*.xlsx"),))
         if not selected:
             return
         samples = {
@@ -4410,11 +4442,11 @@ class FreezerManagerApp(tk.Tk):
             for code in codes
         )
         try:
-            export_cryotube_workbook(Path(selected), [(f"{self.repository.freezer_name}_筛选结果", samples, selected_capacity)])
+            export_cryotube_workbook(Path(selected), [(ui.display(self, msg('{0}_筛选结果', self.repository.freezer_name)), samples, selected_capacity)], language=self.language_state.language)
         except (OSError, ValueError) as exc:
-            self._notify("导出失败", str(exc), danger=True)
+            self._notify(msg('导出失败'), str(exc), danger=True)
             return
-        self._notify("导出完成", f"已导出 {len(codes)} 个冻存盒、{len(samples)} 支冻存管：{Path(selected).name}")
+        self._notify(msg('导出完成'), msg('已导出 {0} 个冻存盒、{1} 支冻存管：{2}', len(codes), len(samples), Path(selected).name))
 
     def clear_content(self, *, preserve_box_modes: bool = False) -> None:
         """Start building the next page behind the currently visible page.
@@ -4423,6 +4455,7 @@ class FreezerManagerApp(tk.Tk):
         into an off-screen layer.  The old page remains on top until the new
         layer has completed more than one stable geometry pass.
         """
+        self._inline_editor_active = False
         if not preserve_box_modes:
             self._exit_box_interaction_modes()
             self.box_page_visible = False
@@ -4525,7 +4558,7 @@ class FreezerManagerApp(tk.Tk):
         self.box_empty_highlights.clear()
         self.box_search_highlights.clear()
         self._set_active_nav("overview")
-        self.page_title_var.set(f"冻存盒总览 · {self.repository.freezer_name}")
+        self.page_title_var.set(msg('冻存盒总览 · {0}', self.repository.freezer_name))
         self._update_sidebar_summary()
         self.clear_content()
         page = ttk.Frame(self.content, style="Page.TFrame", padding=(26, 20))
@@ -4538,17 +4571,17 @@ class FreezerManagerApp(tk.Tk):
         title_row.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         title_box = ttk.Frame(title_row, style="Page.TFrame")
         title_box.pack(side="left")
-        ttk.Label(title_box, text=self.repository.freezer_name, style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=self.repository.freezer_name, style="Title.TLabel").pack(anchor="w")
         storage_columns = self.repository.storage_columns
         storage_layers = self.repository.storage_layers
         box_capacity = self.repository.storage_capacity
         tube_used = self.repository.tube_used_count
         tube_capacity = self.repository.tube_capacity
-        subtitle = "选择冻存盒位进行批量处理" if self.overview_batch_mode else f"{storage_columns}列 × {storage_layers}层；点击盒位查看详情或打开盒内孔位"
-        ttk.Label(title_box, text=subtitle, style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
+        subtitle = msg('选择冻存盒位进行批量处理') if self.overview_batch_mode else msg('{0}列 × {1}层；点击盒位查看详情或打开盒内孔位', storage_columns, storage_layers)
+        ui.TtkLabel(title_box, text=subtitle, style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
         RoundedButton(
             title_row,
-            text="退出批量" if self.overview_batch_mode else "批量处理",
+            text=msg('退出批量') if self.overview_batch_mode else msg('批量处理'),
             command=self.toggle_overview_batch_mode,
             fill="#E8EDF4" if self.overview_batch_mode else COLORS["primary_soft"],
             foreground=COLORS["text"] if self.overview_batch_mode else COLORS["primary"],
@@ -4562,7 +4595,7 @@ class FreezerManagerApp(tk.Tk):
         if not self.overview_batch_mode:
             RoundedButton(
                 title_row,
-                text="调整规格",
+                text=msg('调整规格'),
                 command=self.configure_storage_dialog,
                 fill=COLORS["primary_soft"],
                 foreground=COLORS["primary"],
@@ -4578,12 +4611,12 @@ class FreezerManagerApp(tk.Tk):
         if self.overview_batch_mode:
             batch_panel = self._panel(page, row=1, column=0, sticky="ew", pady=(0, 14))
             selected_boxes = self._overview_selected_box_codes(occupied_only=True)
-            self.overview_batch_status_label = tk.Label(batch_panel, text=f"已选 {len(self.selected_compartments)} 个盒位 · {len(selected_boxes)} 个有细胞冻存盒", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
+            self.overview_batch_status_label = ui.Label(batch_panel, text=msg('已选 {0} 个盒位 · {1} 个有细胞冻存盒', len(self.selected_compartments), len(selected_boxes)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
             self.overview_batch_status_label.pack(side="left", padx=18, pady=12)
-            RoundedButton(batch_panel, text="清空选择", command=self.clear_overview_batch_selection, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=90, height=34, radius=9).pack(side="right", padx=(0, 14), pady=8)
-            RoundedButton(batch_panel, text="导出选中", command=self.overview_batch_export, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
-            RoundedButton(batch_panel, text="批量移动", command=self.overview_batch_move, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", pady=8)
-            RoundedButton(batch_panel, text="批量清空", command=self.overview_batch_clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
+            RoundedButton(batch_panel, text=msg('清空选择'), command=self.clear_overview_batch_selection, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=90, height=34, radius=9).pack(side="right", padx=(0, 14), pady=8)
+            RoundedButton(batch_panel, text=msg('导出选中'), command=self.overview_batch_export, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
+            RoundedButton(batch_panel, text=msg('批量移动'), command=self.overview_batch_move, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", pady=8)
+            RoundedButton(batch_panel, text=msg('批量清空'), command=self.overview_batch_clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
 
         stats = ttk.Frame(page, style="Page.TFrame")
         stats.grid(row=1 + row_offset, column=0, sticky="ew", pady=(0, 14))
@@ -4591,10 +4624,10 @@ class FreezerManagerApp(tk.Tk):
             stats.columnconfigure(index, weight=1, uniform="summary")
         used_boxes = self.repository.used_count
         cards = [
-            ("已用冻存管", str(tube_used), f"管 · {used_boxes}个盒", COLORS["primary"]),
-            ("剩余管位", str(tube_capacity - tube_used), "个冻存管位", COLORS["occupied_text"]),
-            ("冻存盒位", f"{used_boxes}/{box_capacity}", f"{storage_columns}列×{storage_layers}层", "#805AD5"),
-            ("总体使用率", f"{tube_used / tube_capacity * 100:.1f}%", f"总容量 {tube_capacity} 管", "#E29431"),
+            (msg('已用冻存管'), str(tube_used), msg('管 · {0}个盒', used_boxes), COLORS["primary"]),
+            (msg('剩余管位'), str(tube_capacity - tube_used), msg('个冻存管位'), COLORS["occupied_text"]),
+            (msg('冻存盒位'), msg('{0}/{1}', used_boxes, box_capacity), msg('{0}列×{1}层', storage_columns, storage_layers), "#805AD5"),
+            (msg('总体使用率'), msg('{0}%', format(tube_used / tube_capacity * 100, msg('.1f'))), msg('总容量 {0} 管', tube_capacity), "#E29431"),
         ]
         for index, (label, value, suffix, accent) in enumerate(cards):
             card = self._panel(stats, row=0, column=index, sticky="ew", padx=(0 if index == 0 else 6, 0 if index == 3 else 6))
@@ -4604,24 +4637,24 @@ class FreezerManagerApp(tk.Tk):
             label_row = tk.Frame(inside, bg=COLORS["panel"])
             label_row.pack(fill="x")
             tk.Frame(label_row, width=7, height=7, bg=accent).pack(side="left", padx=(0, 7), pady=4)
-            tk.Label(label_row, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
+            ui.Label(label_row, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
             value_row = tk.Frame(inside, bg=COLORS["panel"])
             value_row.pack(fill="x", pady=(3, 0))
-            tk.Label(value_row, text=value, bg=COLORS["panel"], fg=accent, font=("Microsoft YaHei UI", 21, "bold")).pack(anchor="w")
-            tk.Label(inside, text=suffix, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
+            ui.Label(value_row, text=value, bg=COLORS["panel"], fg=accent, font=("Microsoft YaHei UI", 21, "bold")).pack(anchor="w")
+            ui.Label(inside, text=suffix, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
 
         grid_panel = self._panel(page, row=2 + row_offset, column=0, sticky="nsew")
         grid_panel.rowconfigure(1, weight=1)
         grid_panel.columnconfigure(0, weight=1)
         panel_head = tk.Frame(grid_panel, bg=COLORS["panel"])
         panel_head.grid(row=0, column=0, sticky="ew", padx=18, pady=(13, 7))
-        tk.Label(panel_head, text="液氮罐冻存盒位分布", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+        ui.Label(panel_head, text=msg('液氮罐冻存盒位分布'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
         legend = tk.Frame(panel_head, bg=COLORS["panel"])
         legend.pack(side="right")
         tk.Frame(legend, width=8, height=8, bg=COLORS["occupied_text"]).pack(side="left", padx=(0, 6), pady=5)
-        tk.Label(legend, text="已有细胞", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 14))
+        ui.Label(legend, text=msg('已有细胞'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 14))
         tk.Frame(legend, width=8, height=8, bg="#D9E0E9").pack(side="left", padx=(0, 6), pady=5)
-        tk.Label(legend, text="全部空闲", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
+        ui.Label(legend, text=msg('全部空闲'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
 
         grid_scroller = ScrollableFrame(grid_panel, horizontal=True)
         grid_scroller.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
@@ -4632,11 +4665,11 @@ class FreezerManagerApp(tk.Tk):
             grid.columnconfigure(column, weight=1 if column else 0, uniform="storage")
         for row in range(storage_layers + 1):
             grid.rowconfigure(row, weight=1 if row else 0)
-        tk.Label(grid, text="层  /  列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
+        ui.Label(grid, text=msg('层  /  列'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
         for column in range(1, storage_columns + 1):
-            tk.Label(grid, text=f"第 {column} 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
+            ui.Label(grid, text=msg('第 {0} 列', column), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
         for layer in range(1, storage_layers + 1):
-            tk.Label(grid, text=f"第 {layer} 层", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
+            ui.Label(grid, text=msg('第 {0} 层', layer), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
             for column in range(1, storage_columns + 1):
                 self._compartment_button(grid, column, layer).grid(row=layer, column=column, sticky="nsew", padx=7, pady=6)
 
@@ -4652,23 +4685,19 @@ class FreezerManagerApp(tk.Tk):
         try:
             conflicts = self.repository.storage_resize_conflicts(columns, layers)
         except ValueError as exc:
-            self._notify("规格无效", str(exc), danger=True)
+            self._notify(msg('规格无效'), str(exc), danger=True)
             return
         if conflicts:
-            details = "、".join(
-                f"{code}（{self.repository.box_inventory_count(code)}管）"
-                for code in conflicts
-            )
+            details = join_text('、', (msg('{0}（{1}管）', code, self.repository.box_inventory_count(code)) for code in conflicts))
             action = AppDialog(
                 self,
-                title="无法缩小规格",
+                title=msg('无法缩小规格'),
                 message=(
-                    f"新规格范围外仍有库存：\n{details}\n\n"
-                    "规格尚未改变。请先移动或清空这些冻存盒，再重新调整。"
+                    msg('新规格范围外仍有库存：\n{0}\n\n规格尚未改变。请先移动或清空这些冻存盒，再重新调整。', details)
                 ),
                 buttons=[
-                    ("取消", None, "secondary"),
-                    ("去处理库存", "resolve", "primary"),
+                    (msg('取消'), None, "secondary"),
+                    (msg('去处理库存'), "resolve", "primary"),
                 ],
                 width=520,
             ).show()
@@ -4680,7 +4709,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             self.repository.configure_storage(columns, layers)
         except (OSError, ValueError) as exc:
-            self._notify("规格保存失败", str(exc), danger=True)
+            self._notify(msg('规格保存失败'), str(exc), danger=True)
             return
         self.selected_compartments.intersection_update(
             sqlite_all_unit_codes(columns, layers)
@@ -4695,7 +4724,7 @@ class FreezerManagerApp(tk.Tk):
         selected = self.overview_batch_mode and code in self.selected_compartments
         button = RoundedButton(
             parent,
-            text=(f"✓  {code}\n●  已有细胞" if selected else (f"{code}\n●  已有细胞" if occupied else f"{code}\n○  空冻存盒")),
+            text=(msg('✓  {0}\n●  已有细胞', code) if selected else (msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code))),
             command=(lambda value=code: self.toggle_compartment_selection(value)) if self.overview_batch_mode else (lambda: self.show_compartment(column, layer)),
             fill=COLORS["primary"] if selected else (COLORS["occupied"] if occupied else COLORS["empty"]),
             foreground="white" if selected else (COLORS["occupied_text"] if occupied else COLORS["text"]),
@@ -4736,7 +4765,7 @@ class FreezerManagerApp(tk.Tk):
         if label is None or not label.winfo_exists():
             return
         selected_boxes = self._overview_selected_box_codes(occupied_only=True)
-        label.configure(text=f"已选 {len(self.selected_compartments)} 个盒位 · {len(selected_boxes)} 个有细胞冻存盒")
+        label.configure(text=msg('已选 {0} 个盒位 · {1} 个有细胞冻存盒', len(self.selected_compartments), len(selected_boxes)))
 
     def _refresh_overview_compartment_button(self, code: str) -> None:
         button = getattr(self, "overview_compartment_buttons", {}).get(code)
@@ -4747,9 +4776,9 @@ class FreezerManagerApp(tk.Tk):
         occupied = used > 0
         selected = code in self.selected_compartments
         button.set_text(
-            f"✓  {code}\n●  已有细胞"
+            msg('✓  {0}\n●  已有细胞', code)
             if selected
-            else (f"{code}\n●  已有细胞" if occupied else f"{code}\n○  空冻存盒")
+            else (msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code))
         )
         button.set_palette(
             fill=COLORS["primary"] if selected else (COLORS["occupied"] if occupied else COLORS["empty"]),
@@ -4774,57 +4803,55 @@ class FreezerManagerApp(tk.Tk):
     def overview_batch_clear(self) -> None:
         codes = self._overview_selected_box_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可清空的冻存盒", "所选冻存盒内没有已录入的细胞。", danger=True)
+            self._notify(msg('没有可清空的冻存盒'), msg('所选冻存盒内没有已录入的细胞。'), danger=True)
             return
         tube_count = sum(len(self.repository.get_box_samples(code)) for code in codes)
         if not self._ask_confirm(
-            "确认批量清空冻存盒",
-            f"确定清空选中的 {len(codes)} 个冻存盒吗？\n"
-            f"盒内共 {tube_count} 支冻存管，清空后孔位将全部变为空位。\n"
-            "执行前会自动创建备份。",
+            msg('确认批量清空冻存盒'),
+            msg('确定清空选中的 {0} 个冻存盒吗？\n盒内共 {1} 支冻存管，清空后孔位将全部变为空位。\n执行前会自动创建备份。', len(codes), tube_count),
             danger=True,
         ):
             return
         try:
-            self.repository.create_backup("冻存盒批量清空前")
+            self.repository.create_backup(msg('冻存盒批量清空前'))
             removed_boxes, removed_tubes = self.repository.clear_boxes(codes)
         except (OSError, ValueError) as exc:
-            self._notify("批量清空失败", str(exc), danger=True)
+            self._notify(msg('批量清空失败'), str(exc), danger=True)
             return
         self.selected_compartments.clear()
         self._update_sidebar_summary()
-        self._notify("批量清空完成", f"已清空 {removed_boxes} 个冻存盒，共移除 {removed_tubes} 支冻存管。")
+        self._notify(msg('批量清空完成'), msg('已清空 {0} 个冻存盒，共移除 {1} 支冻存管。', removed_boxes, removed_tubes))
         self.show_overview()
 
     def overview_batch_move(self) -> None:
         codes = self._overview_selected_box_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可移动冻存盒", "请选择至少一个盒内已有细胞的冻存盒。", danger=True)
+            self._notify(msg('没有可移动冻存盒'), msg('请选择至少一个盒内已有细胞的冻存盒。'), danger=True)
             return
         result = BoxMoveDialog(self, codes).show()
         if result is None:
             return
         target_id, target_codes = result
         try:
-            self.repository.create_backup("冻存盒批量移动前")
+            self.repository.create_backup(msg('冻存盒批量移动前'))
             mappings = self.repository.move_boxes(codes, target_id, target_codes)
         except (OSError, ValueError) as exc:
-            self._notify("移动失败", str(exc), danger=True)
+            self._notify(msg('移动失败'), str(exc), danger=True)
             return
         self.selected_compartments.clear()
         self.overview_batch_mode = False
         self._update_sidebar_summary()
-        summary = "、".join(f"{source}→{target}" for source, target in mappings[:6])
+        summary = join_text('、', (msg('{0}→{1}', source, target) for source, target in mappings[:6]))
         target_name = self.repository.freezers[target_id].name
-        self._notify("批量移动完成", f"已将 {len(mappings)} 个细胞冻存盒移动到“{target_name}”。\n{summary}{'……' if len(mappings) > 6 else ''}")
+        self._notify(msg('批量移动完成'), msg('已将 {0} 个细胞冻存盒移动到“{1}”。\n{2}{3}', len(mappings), target_name, summary, '……' if len(mappings) > 6 else ''))
         self.show_overview()
 
     def overview_batch_export(self) -> None:
         codes = self._overview_selected_box_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可导出记录", "所选盒位中没有已录入的冻存管。", danger=True)
+            self._notify(msg('没有可导出记录'), msg('所选盒位中没有已录入的冻存管。'), danger=True)
             return
-        selected = filedialog.asksaveasfilename(parent=self, title="导出总览选中记录", initialdir=str(Path(__file__).parent), initialfile=f"{self.repository.freezer_name}_总览选中记录.xlsx", defaultextension=".xlsx", filetypes=(("Excel 工作簿", "*.xlsx"),))
+        selected = ui.asksaveasfilename(parent=self, title=msg('导出总览选中记录'), initialdir=str(Path(__file__).parent), initialfile=msg('{0}_总览选中记录.xlsx', self.repository.freezer_name), defaultextension=".xlsx", filetypes=((msg('Excel 工作簿'), "*.xlsx"),))
         if not selected:
             return
         try:
@@ -4839,12 +4866,13 @@ class FreezerManagerApp(tk.Tk):
             )
             export_cryotube_workbook(
                 Path(selected),
-                [(f"{self.repository.freezer_name}_选中记录", samples, selected_capacity)],
+                [(ui.display(self, msg('{0}_选中记录', self.repository.freezer_name)), samples, selected_capacity)],
+                language=self.language_state.language,
             )
         except (OSError, ValueError) as exc:
-            self._notify("导出失败", str(exc), danger=True)
+            self._notify(msg('导出失败'), str(exc), danger=True)
             return
-        self._notify("导出完成", f"已导出 {len(samples)} 支冻存管：{Path(selected).name}")
+        self._notify(msg('导出完成'), msg('已导出 {0} 支冻存管：{1}', len(samples), Path(selected).name))
 
     def change_layer(self, layer: int) -> None:
         self.current_layer = layer
@@ -4855,7 +4883,7 @@ class FreezerManagerApp(tk.Tk):
         self.box_empty_highlights.clear()
         self.box_search_highlights.clear()
         self._set_active_nav("overview")
-        self.page_title_var.set(f"冻存盒详情 · {self.repository.freezer_name}")
+        self.page_title_var.set(msg('冻存盒详情 · {0}', self.repository.freezer_name))
         self.current_layer = layer
         next_compartment = (column, layer)
         self.compartment_batch_mode = False
@@ -4870,7 +4898,7 @@ class FreezerManagerApp(tk.Tk):
         nav.pack(fill="x", pady=(0, 16))
         RoundedButton(
             nav,
-            text="←  返回总览",
+            text=msg('←  返回总览'),
             command=self.show_overview,
             fill="#E8EDF4",
             foreground=COLORS["text"],
@@ -4884,8 +4912,8 @@ class FreezerManagerApp(tk.Tk):
         ).pack(side="left")
         title_box = ttk.Frame(nav, style="Page.TFrame")
         title_box.pack(side="left", padx=18)
-        ttk.Label(title_box, text=f"冻存盒位 {code}", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text=f"第{column}列 · 第{layer}层", style="PageMuted.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('冻存盒位 {0}', code), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('第{0}列 · 第{1}层', column, layer), style="PageMuted.TLabel").pack(anchor="w")
 
         info = self._panel(page)
         info.pack(fill="x", pady=(0, 16))
@@ -4894,19 +4922,19 @@ class FreezerManagerApp(tk.Tk):
         box_capacity = box_layout.rows * box_layout.columns
         summary_text = tk.Frame(info, bg=COLORS["panel"])
         summary_text.pack(side="left", padx=20, pady=13)
-        tk.Label(summary_text, text=f"冻存盒位 {code}", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-        tk.Label(summary_text, text=f"第 {column} 列 · 第 {layer} 层", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
+        ui.Label(summary_text, text=msg('冻存盒位 {0}', code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+        ui.Label(summary_text, text=msg('第 {0} 列 · 第 {1} 层', column, layer), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
         metrics = tk.Frame(info, bg=COLORS["panel"])
         metrics.pack(side="right", padx=18, pady=10)
         for label, value, color in (
-            ("盒位类型", "细胞冻存盒", COLORS["occupied_text"]),
-            ("盒内布局", f"{box_layout.rows}×{box_layout.columns}", COLORS["primary"]),
-            ("已用孔位", f"{box_sample_count}/{box_capacity}", "#805AD5"),
+            (msg('盒位类型'), msg('细胞冻存盒'), COLORS["occupied_text"]),
+            (msg('盒内布局'), msg('{0}×{1}', box_layout.rows, box_layout.columns), COLORS["primary"]),
+            (msg('已用孔位'), msg('{0}/{1}', box_sample_count, box_capacity), "#805AD5"),
         ):
             metric = tk.Frame(metrics, bg="#F7F9FC", padx=13, pady=6)
             metric.pack(side="left", padx=4)
-            tk.Label(metric, text=label, bg="#F7F9FC", fg=COLORS["muted"], font=("Microsoft YaHei UI", 7)).pack()
-            tk.Label(metric, text=value, bg="#F7F9FC", fg=color, font=("Microsoft YaHei UI", 10, "bold")).pack()
+            ui.Label(metric, text=label, bg="#F7F9FC", fg=COLORS["muted"], font=("Microsoft YaHei UI", 7)).pack()
+            ui.Label(metric, text=value, bg="#F7F9FC", fg=color, font=("Microsoft YaHei UI", 10, "bold")).pack()
 
         unit_area = ttk.Frame(page, style="Page.TFrame")
         unit_area.pack(fill="x")
@@ -4924,16 +4952,16 @@ class FreezerManagerApp(tk.Tk):
             details.pack(side="left", fill="both", expand=True)
             heading_row = tk.Frame(details, bg=COLORS["panel"])
             heading_row.pack(fill="x")
-            tk.Label(heading_row, text=f"细胞冻存盒 {ucode}", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 16, "bold")).pack(side="left")
-            status_text = f"已用 {box_sample_count} 孔" if box_sample_count else "盒内暂无细胞"
-            tk.Label(heading_row, text=status_text, bg=COLORS["occupied"] if box_sample_count else "#EEF2F7", fg=COLORS["occupied_text"] if box_sample_count else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=10, pady=4).pack(side="left", padx=12)
-            tk.Label(details, text=f"位置：第 {column} 列 / 第 {layer} 层    ·    盒内：{box_sample_count} 个已用孔位", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(5, 12))
+            ui.Label(heading_row, text=msg('细胞冻存盒 {0}', ucode), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 16, "bold")).pack(side="left")
+            status_text = msg('已用 {0} 孔', box_sample_count) if box_sample_count else msg('盒内暂无细胞')
+            ui.Label(heading_row, text=status_text, bg=COLORS["occupied"] if box_sample_count else "#EEF2F7", fg=COLORS["occupied_text"] if box_sample_count else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=10, pady=4).pack(side="left", padx=12)
+            ui.Label(details, text=msg('位置：第 {0} 列 / 第 {1} 层    ·    盒内：{2} 个已用孔位', column, layer, box_sample_count), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(5, 12))
             actions = tk.Frame(inside, bg=COLORS["panel"], width=190)
             actions.pack(side="right", fill="y", padx=(24, 0))
             actions.pack_propagate(False)
             action_button = RoundedButton(
                 actions,
-                text="打开细胞冻存盒",
+                text=msg('打开细胞冻存盒'),
                 command=lambda value=ucode: self.show_box(value),
                 fill=COLORS["primary"],
                 foreground="white",
@@ -4947,8 +4975,8 @@ class FreezerManagerApp(tk.Tk):
 
         hint = self._panel(page)
         hint.pack(fill="x", pady=(14, 0))
-        tk.Label(hint, text="编号规则", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left", padx=(18, 10), pady=12)
-        tk.Label(hint, text="41 = 第4列 / 第1层 / 对应一个冻存盒位", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left", pady=12)
+        ui.Label(hint, text=msg('编号规则'), bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left", padx=(18, 10), pady=12)
+        ui.Label(hint, text=msg('41 = 第4列 / 第1层 / 对应一个冻存盒位'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left", pady=12)
 
     def toggle_compartment_batch_mode(self, column: int, layer: int) -> None:
         self.compartment_batch_mode = not self.compartment_batch_mode
@@ -4982,7 +5010,7 @@ class FreezerManagerApp(tk.Tk):
         if label is None or not label.winfo_exists():
             return
         occupied = self._selected_compartment_unit_codes(occupied_only=True)
-        label.configure(text=f"已选 {len(self.selected_compartment_units)} 个冻存盒 · {len(occupied)} 个有细胞冻存盒")
+        label.configure(text=msg('已选 {0} 个冻存盒 · {1} 个有细胞冻存盒', len(self.selected_compartment_units), len(occupied)))
 
     def _refresh_compartment_unit_selection(self, code: str) -> None:
         widgets = getattr(self, "compartment_unit_widgets", {}).get(code)
@@ -4997,7 +5025,7 @@ class FreezerManagerApp(tk.Tk):
             highlightthickness=2 if selected else 1,
             highlightbackground=COLORS["primary"] if selected else ("#BFE4D2" if record.occupied else COLORS["line"]),
         )
-        button.set_text("取消选择" if selected else "选择冻存盒")
+        button.set_text(msg('取消选择') if selected else msg('选择冻存盒'))
         button.set_palette(
             fill=COLORS["primary"] if selected else COLORS["primary_soft"],
             foreground="white" if selected else COLORS["primary"],
@@ -5008,69 +5036,69 @@ class FreezerManagerApp(tk.Tk):
     def compartment_batch_clear(self) -> None:
         codes = self._selected_compartment_unit_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可处理记录", "请选择至少一个有细胞的冻存盒。", danger=True)
+            self._notify(msg('没有可处理记录'), msg('请选择至少一个有细胞的冻存盒。'), danger=True)
             return
-        if not self._ask_confirm("确认批量清空", f"确定清空选中的 {len(codes)} 条记录吗？\n此操作不可撤销。", danger=True):
+        if not self._ask_confirm(msg('确认批量清空'), msg('确定清空选中的 {0} 条记录吗？\n此操作不可撤销。', len(codes)), danger=True):
             return
-        if not self._ask_confirm("再次确认清除", "第二次确认：确定继续清除这些记录吗？", danger=True):
+        if not self._ask_confirm(msg('再次确认清除'), msg('第二次确认：确定继续清除这些记录吗？'), danger=True):
             return
         try:
             removed = self.repository.batch_clear(codes)
         except OSError as exc:
-            self._notify("批量清空失败", str(exc), danger=True)
+            self._notify(msg('批量清空失败'), str(exc), danger=True)
             return
         compartment = self.current_compartment
         self.selected_compartment_units.clear()
         self.compartment_batch_mode = False
         self._update_sidebar_summary()
-        self._notify("批量清空完成", f"已清空 {removed} 条记录。")
+        self._notify(msg('批量清空完成'), msg('已清空 {0} 条记录。', removed))
         if compartment:
             self.show_compartment(*compartment)
 
     def compartment_batch_move(self) -> None:
         codes = self._selected_compartment_unit_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可处理记录", "请选择至少一个有细胞的冻存盒。", danger=True)
+            self._notify(msg('没有可处理记录'), msg('请选择至少一个有细胞的冻存盒。'), danger=True)
             return
-        target_name = self._ask_text("批量移动", "请输入目标液氮罐的完整名称：", self.repository.freezer_name)
+        target_name = self._ask_text(msg('批量移动'), msg('请输入目标液氮罐的完整名称：'), self.repository.freezer_name)
         if target_name is None:
             return
         target_id = next((freezer_id for freezer_id, name in self.repository.list_freezers() if name.casefold() == target_name.strip().casefold()), None)
         if target_id is None:
-            self._notify("目标液氮罐不存在", "请输入侧栏中显示的完整液氮罐名称。", danger=True)
+            self._notify(msg('目标液氮罐不存在'), msg('请输入侧栏中显示的完整液氮罐名称。'), danger=True)
             return
-        start_code = self._ask_text("目标起始盒位", "程序会从该位置开始依次寻找空位。", "11")
-        if start_code is None or not self._ask_confirm("确认移动", f"将 {len(codes)} 条记录移动到“{target_name}”，并从 {start_code} 开始寻找空位吗？"):
+        start_code = self._ask_text(msg('目标起始盒位'), msg('程序会从该位置开始依次寻找空位。'), "11")
+        if start_code is None or not self._ask_confirm(msg('确认移动'), msg('将 {0} 条记录移动到“{1}”，并从 {2} 开始寻找空位吗？', len(codes), target_name, start_code)):
             return
         try:
-            self.repository.create_backup("冻存盒批量移动前")
+            self.repository.create_backup(msg('冻存盒批量移动前'))
             mappings = self.repository.batch_move(codes, target_id, start_code.strip())
         except (OSError, ValueError) as exc:
-            self._notify("移动失败", str(exc), danger=True)
+            self._notify(msg('移动失败'), str(exc), danger=True)
             return
         compartment = self.current_compartment
         self.selected_compartment_units.clear()
         self.compartment_batch_mode = False
         self._update_sidebar_summary()
-        summary = "、".join(f"{source}→{target}" for source, target in mappings[:6])
-        self._notify("批量移动完成", f"已移动 {len(mappings)} 条记录。\n{summary}{'……' if len(mappings) > 6 else ''}")
+        summary = join_text('、', (msg('{0}→{1}', source, target) for source, target in mappings[:6]))
+        self._notify(msg('批量移动完成'), msg('已移动 {0} 条记录。\n{1}{2}', len(mappings), summary, '……' if len(mappings) > 6 else ''))
         if compartment:
             self.show_compartment(*compartment)
 
     def compartment_batch_export(self) -> None:
         codes = self._selected_compartment_unit_codes(occupied_only=True)
         if not codes:
-            self._notify("没有可导出记录", "请选择至少一个有细胞的冻存盒。", danger=True)
+            self._notify(msg('没有可导出记录'), msg('请选择至少一个有细胞的冻存盒。'), danger=True)
             return
-        selected = filedialog.asksaveasfilename(parent=self, title="导出冻存盒位选中记录", initialdir=str(Path(__file__).parent), initialfile=f"{self.repository.freezer_name}_{codes[0]}_选中记录.xlsx", defaultextension=".xlsx", filetypes=(("Excel 工作簿", "*.xlsx"),))
+        selected = ui.asksaveasfilename(parent=self, title=msg('导出冻存盒位选中记录'), initialdir=str(Path(__file__).parent), initialfile=msg('{0}_{1}_选中记录.xlsx', self.repository.freezer_name, codes[0]), defaultextension=".xlsx", filetypes=((msg('Excel 工作簿'), "*.xlsx"),))
         if not selected:
             return
         try:
-            export_freezer_workbook(Path(selected), [(f"{self.repository.freezer_name}_{codes[0]}", {code: self.repository.get(code) for code in codes})])
+            export_freezer_workbook(Path(selected), [(msg('{0}_{1}', self.repository.freezer_name, codes[0]), {code: self.repository.get(code) for code in codes})], language=self.language_state.language)
         except (OSError, ValueError) as exc:
-            self._notify("导出失败", str(exc), danger=True)
+            self._notify(msg('导出失败'), str(exc), danger=True)
             return
-        self._notify("导出完成", f"已导出 {len(codes)} 条记录：{Path(selected).name}")
+        self._notify(msg('导出完成'), msg('已导出 {0} 条记录：{1}', len(codes), Path(selected).name))
 
     def show_box(self, code: str) -> None:
         if not self.repository.is_storage_code(code):
@@ -5082,7 +5110,7 @@ class FreezerManagerApp(tk.Tk):
         )
         opening_box_page = changed_box or not self.box_page_visible
         self._set_active_nav("overview")
-        self.page_title_var.set(f"细胞冻存盒 · {self.repository.freezer_name} / {code}")
+        self.page_title_var.set(msg('细胞冻存盒 · {0} / {1}', self.repository.freezer_name, code))
         pending_highlight = self.pending_search_highlight
         if (
             pending_highlight
@@ -5135,48 +5163,48 @@ class FreezerManagerApp(tk.Tk):
         nav.grid(row=0, column=0, sticky="ew", padx=28, pady=(22, 14))
         parsed = parse_unit_code(code)
         if self.box_search_return_mode == "basic":
-            back_text = "←  返回搜索结果"
+            back_text = msg('←  返回搜索结果')
             back_command = self.show_search_results
         elif self.box_search_return_mode == "advanced":
-            back_text = "←  返回高级搜索"
+            back_text = msg('←  返回高级搜索')
             back_command = lambda: self.show_advanced_search_page(run_search=True)
         elif self.box_search_return_mode == "empty":
-            back_text = "←  返回查找空位"
+            back_text = msg('←  返回查找空位')
             back_command = lambda: self.show_empty_search_page(run_search=True)
         elif self.box_search_return_mode == "locations":
-            back_text = "←  返回细胞位置"
+            back_text = msg('←  返回细胞位置')
             back_command = self.return_to_inventory_locations
         else:
-            back_text = f"←  返回冻存盒位 {code}"
+            back_text = msg('←  返回冻存盒位 {0}', code)
             back_command = lambda: self.show_compartment(*parsed)
         RoundedButton(nav, text=back_text, command=lambda target=back_command: self._run_box_back_command(target), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=160, height=38, radius=10).pack(side="left")
         title_box = ttk.Frame(nav, style="Page.TFrame")
         title_box.pack(side="left", padx=18)
-        ttk.Label(title_box, text=f"细胞冻存盒 {code}", style="Title.TLabel").pack(anchor="w")
-        self.box_title_summary_label = ttk.Label(title_box, text=f"盒位 {code} · {layout.rows}×{layout.columns} · 已使用 {len(samples)}/{layout.rows * layout.columns}", style="PageMuted.TLabel")
+        ui.TtkLabel(title_box, text=msg('细胞冻存盒 {0}', code), style="Title.TLabel").pack(anchor="w")
+        self.box_title_summary_label = ui.TtkLabel(title_box, text=msg('盒位 {0} · {1}×{2} · 已使用 {3}/{4}', code, layout.rows, layout.columns, len(samples), layout.rows * layout.columns), style="PageMuted.TLabel")
         self.box_title_summary_label.pack(anchor="w")
         if self.box_search_highlights:
-            tk.Label(
+            ui.Label(
                 title_box,
-                text=f"查找结果：已高亮 {len(self.box_search_highlights)} 个匹配孔位",
+                text=msg('查找结果：已高亮 {0} 个匹配孔位', len(self.box_search_highlights)),
                 bg=COLORS["bg"],
                 fg="#B76E00",
                 font=("Microsoft YaHei UI", 9, "bold"),
             ).pack(anchor="w", pady=(3, 0))
         if self.box_empty_highlights:
-            tk.Label(
+            ui.Label(
                 title_box,
-                text=f"推荐空位：已高亮并选中 {len(self.box_empty_highlights)} 个孔位",
+                text=msg('推荐空位：已高亮并选中 {0} 个孔位', len(self.box_empty_highlights)),
                 bg=COLORS["bg"],
                 fg=COLORS["primary"],
                 font=("Microsoft YaHei UI", 9, "bold"),
             ).pack(anchor="w", pady=(3, 0))
-        RoundedButton(nav, text="退出批量" if self.box_batch_mode else "批量选择", command=lambda: self.toggle_box_batch_mode(code), fill="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], foreground=COLORS["text"] if self.box_batch_mode else COLORS["primary"], hover_fill="#DCE4EE" if self.box_batch_mode else "#DCE8FF", border="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], canvas_bg=COLORS["bg"], width=105, height=38, radius=10).pack(side="right")
-        RoundedButton(nav, text="设置布局", command=lambda: self.configure_box_dialog(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(nav, text=msg('退出批量') if self.box_batch_mode else msg('批量选择'), command=lambda: self.toggle_box_batch_mode(code), fill="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], foreground=COLORS["text"] if self.box_batch_mode else COLORS["primary"], hover_fill="#DCE4EE" if self.box_batch_mode else "#DCE8FF", border="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], canvas_bg=COLORS["bg"], width=105, height=38, radius=10).pack(side="right")
+        RoundedButton(nav, text=msg('设置布局'), command=lambda: self.configure_box_dialog(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10).pack(side="right", padx=9)
         if not self.box_batch_mode:
             RoundedButton(
                 nav,
-                text="关闭快捷移动" if self.box_quick_move_mode else "快捷移动",
+                text=msg('关闭快捷移动') if self.box_quick_move_mode else msg('快捷移动'),
                 command=lambda: self.toggle_box_quick_move_mode(code),
                 fill=COLORS["primary"] if self.box_quick_move_mode else COLORS["primary_soft"],
                 foreground="white" if self.box_quick_move_mode else COLORS["primary"],
@@ -5190,22 +5218,22 @@ class FreezerManagerApp(tk.Tk):
 
         toolbar = self._panel(page)
         toolbar.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 14))
-        self.box_batch_status_label = tk.Label(toolbar, text=self._box_status_text(code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
+        self.box_batch_status_label = ui.Label(toolbar, text=self._box_status_text(code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
         self.box_batch_status_label.pack(side="left", padx=18, pady=13)
         if self.box_batch_mode:
-            RoundedButton(toolbar, text="全选", command=lambda: self.select_all_box_positions(code), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(5, 14), pady=8)
-            RoundedButton(toolbar, text="清空选择", command=lambda: self.clear_box_selection(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text="清除", command=lambda: self.batch_clear_box_positions(code), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=78, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text="批量出库", command=lambda: self.batch_checkout_box_positions(code), fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text="批量入库", command=lambda: self.batch_edit_box_positions(code), fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('全选'), command=lambda: self.select_all_box_positions(code), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(5, 14), pady=8)
+            RoundedButton(toolbar, text=msg('清空选择'), command=lambda: self.clear_box_selection(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('清除'), command=lambda: self.batch_clear_box_positions(code), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=78, height=34, radius=9).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('批量出库'), command=lambda: self.batch_checkout_box_positions(code), fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('批量入库'), command=lambda: self.batch_edit_box_positions(code), fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
         else:
             zoom_controls = tk.Frame(toolbar, bg=COLORS["panel"])
             zoom_controls.pack(side="right", padx=(6, 14), pady=7)
-            RoundedButton(zoom_controls, text="− 缩小", command=lambda: self._change_box_grid_zoom(-1), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=70, height=32, radius=8, font=("Microsoft YaHei UI", 8)).pack(side="left")
-            self.box_zoom_value_label = tk.Label(zoom_controls, text=f"{self._box_zoom_percent()}%", width=6, bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"))
+            RoundedButton(zoom_controls, text=msg('− 缩小'), command=lambda: self._change_box_grid_zoom(-1), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=70, height=32, radius=8, font=("Microsoft YaHei UI", 8), focus_outline=False).pack(side="left")
+            self.box_zoom_value_label = ui.Label(zoom_controls, text=msg('{0}%', self._box_zoom_percent()), width=6, bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"))
             self.box_zoom_value_label.pack(side="left", padx=3)
-            RoundedButton(zoom_controls, text="＋ 放大", command=lambda: self._change_box_grid_zoom(1), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=70, height=32, radius=8, font=("Microsoft YaHei UI", 8, "bold")).pack(side="left")
-            RoundedButton(zoom_controls, text="适应窗口", command=lambda: self.fit_box_grid_to_view(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=78, height=32, radius=8, font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(7, 0))
+            RoundedButton(zoom_controls, text=msg('＋ 放大'), command=lambda: self._change_box_grid_zoom(1), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=70, height=32, radius=8, font=("Microsoft YaHei UI", 8, "bold"), focus_outline=False).pack(side="left")
+            RoundedButton(zoom_controls, text=msg('适应窗口'), command=lambda: self.fit_box_grid_to_view(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=78, height=32, radius=8, font=("Microsoft YaHei UI", 8), focus_outline=False).pack(side="left", padx=(7, 0))
 
         box_panel = self._panel(page)
         box_panel.grid(row=2, column=0, sticky="nsew", padx=28, pady=(0, 18))
@@ -5213,13 +5241,13 @@ class FreezerManagerApp(tk.Tk):
         self.box_legend_widget = legend
         legend.pack(side="bottom", fill="x", padx=22, pady=(2, 8))
         legend.pack_propagate(False)
-        for label, color in (("空孔", "#EEF2F7"), ("已有细胞", COLORS["occupied"]), ("查找命中", "#FFD166"), ("可移动目标", "#DCE8FF"), ("已选择", COLORS["primary"])):
-            tk.Label(legend, text=f"  {label}  ", bg=color, fg="white" if color == COLORS["primary"] else COLORS["text"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 8), pady=8)
+        for label, color in ((msg('空孔'), "#EEF2F7"), (msg('已有细胞'), COLORS["occupied"]), (msg('查找命中'), "#FFD166"), (msg('可移动目标'), "#DCE8FF"), (msg('已选择'), COLORS["primary"])):
+            ui.Label(legend, text=msg('  {0}  ', label), bg=color, fg="white" if color == COLORS["primary"] else COLORS["text"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 8), pady=8)
         self.box_move_undo_button = None
         if self.box_quick_move_mode:
             self.box_move_undo_button = RoundedButton(
                 legend,
-                text="撤销上次移动" if self._box_undo_available(code) else "暂无可撤销移动",
+                text=msg('撤销上次移动') if self._box_undo_available(code) else msg('暂无可撤销移动'),
                 command=self.undo_box_quick_move,
                 fill=COLORS["primary_soft"] if self._box_undo_available(code) else "#EEF2F7",
                 foreground=COLORS["primary"] if self._box_undo_available(code) else COLORS["muted"],
@@ -5255,19 +5283,19 @@ class FreezerManagerApp(tk.Tk):
         self.box_column_labels = []
         self.box_row_labels = []
         metrics = self._box_zoom_metrics(layout.columns)
-        tk.Label(grid, text="", bg=COLORS["panel"], width=3).grid(row=0, column=0)
+        ui.Label(grid, text="", bg=COLORS["panel"], width=3).grid(row=0, column=0)
         for column in range(1, layout.columns + 1):
-            label = tk.Label(grid, text=str(column), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", metrics["label_font"], "bold"), width=metrics["width"])
+            label = ui.Label(grid, text=str(column), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", metrics["label_font"], "bold"), width=metrics["width"])
             label.grid(row=0, column=column, pady=(0, 5))
             self.box_column_labels.append(label)
         for row in range(1, layout.rows + 1):
             row_label = self.repository.box_position(row, 1)[:-1]
-            label = tk.Label(grid, text=row_label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", metrics["label_font"], "bold"), width=3)
+            label = ui.Label(grid, text=row_label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", metrics["label_font"], "bold"), width=3)
             label.grid(row=row, column=0, padx=(0, 5))
             self.box_row_labels.append(label)
             for column in range(1, layout.columns + 1):
                 position = self.repository.box_position(row, column)
-                button = tk.Button(
+                button = ui.Button(
                     grid,
                     text=self._box_button_text(position, samples.get(position)),
                     command=lambda value=position: self.toggle_box_position(code, value) if self.box_batch_mode else self.edit_box_position(code, value),
@@ -5352,7 +5380,7 @@ class FreezerManagerApp(tk.Tk):
         self._style_box_position(code, position)
         status = getattr(self, "box_batch_status_label", None)
         if status is not None and status.winfo_exists():
-            status.configure(text=f"正在移动 {position} · 拖到同盒空孔位后松开鼠标")
+            status.configure(text=msg('正在移动 {0} · 拖到同盒空孔位后松开鼠标', position))
         # Keep the normal Button class binding active. If the mouse is released
         # on this same cell, Tk will still treat it as a regular click and open
         # the editor; a release over another cell is handled as a move below.
@@ -5385,7 +5413,7 @@ class FreezerManagerApp(tk.Tk):
             self._clear_box_drag_state(code)
             status = getattr(self, "box_batch_status_label", None)
             if status is not None and status.winfo_exists():
-                status.configure(text=f"{target} 已有细胞，未执行移动 · 请选择空孔位")
+                status.configure(text=msg('{0} 已有细胞，未执行移动 · 请选择空孔位', target))
                 self._schedule_box_move_hint_reset(code)
             return "break"
 
@@ -5393,7 +5421,7 @@ class FreezerManagerApp(tk.Tk):
             moved_sample = self.repository.move_box_sample(code, source, target)
         except (OSError, ValueError) as exc:
             self._clear_box_drag_state(code)
-            self._notify("移动失败", str(exc), danger=True)
+            self._notify(msg('移动失败'), str(exc), danger=True)
             return "break"
 
         self.box_drag_source = None
@@ -5407,7 +5435,7 @@ class FreezerManagerApp(tk.Tk):
         self._update_sidebar_summary()
         status = getattr(self, "box_batch_status_label", None)
         if status is not None and status.winfo_exists():
-            status.configure(text=f"已将“{moved_sample.sample_name}”从 {source} 移至 {target} · 可点击“撤销上次移动”恢复")
+            status.configure(text=msg('已将“{0}”从 {1} 移至 {2} · 可点击“撤销上次移动”恢复', moved_sample.sample_name, source, target))
         return "break"
 
     def _finish_box_drag_outside_cell(self, event: tk.Event) -> str | None:
@@ -5457,7 +5485,7 @@ class FreezerManagerApp(tk.Tk):
         if button is None or not button.winfo_exists():
             return
         available = bool(code and self._box_undo_available(code))
-        button.set_text("撤销上次移动" if available else "暂无可撤销移动")
+        button.set_text(msg('撤销上次移动') if available else msg('暂无可撤销移动'))
         button.set_palette(
             fill=COLORS["primary_soft"] if available else "#EEF2F7",
             foreground=COLORS["primary"] if available else COLORS["muted"],
@@ -5475,13 +5503,13 @@ class FreezerManagerApp(tk.Tk):
             return
         if self.repository.get_box_sample(code, source).occupied or self.repository.get_box_sample(code, target) != sample:
             self._clear_box_move_undo()
-            self._notify("无法撤销", "孔位内容已经发生变化，为避免覆盖数据，本次撤销已取消。", danger=True)
+            self._notify(msg('无法撤销'), msg('孔位内容已经发生变化，为避免覆盖数据，本次撤销已取消。'), danger=True)
             return
         try:
             self.repository.move_box_sample(code, target, source, undo=True)
         except (OSError, ValueError) as exc:
             self._clear_box_move_undo()
-            self._notify("撤销失败", str(exc), danger=True)
+            self._notify(msg('撤销失败'), str(exc), danger=True)
             return
         # Move a search hit back with the cell so all other highlighted holes
         # keep exactly the same visual state.
@@ -5493,7 +5521,7 @@ class FreezerManagerApp(tk.Tk):
         self._update_sidebar_summary()
         status = getattr(self, "box_batch_status_label", None)
         if status is not None and status.winfo_exists():
-            status.configure(text=f"已撤销：细胞已从 {target} 移回 {source}")
+            status.configure(text=msg('已撤销：细胞已从 {0} 移回 {1}', target, source))
             self._schedule_box_move_hint_reset(code)
 
     @staticmethod
@@ -5523,7 +5551,7 @@ class FreezerManagerApp(tk.Tk):
             name = sample.sample_name.strip()
             layout = self.repository.get_box_layout(self.current_box_code) if self.current_box_code else None
             limit = self._box_zoom_metrics(layout.columns)["name_length"] if layout else 7
-            return f"{position}\n{name[:limit]}{'…' if len(name) > limit else ''}"
+            return msg('{0}\n{1}{2}', position, name[:limit], '…' if len(name) > limit else '')
         return position
 
     def _sync_box_grid_scroll_region(self, _event: tk.Event | None = None) -> None:
@@ -5728,7 +5756,7 @@ class FreezerManagerApp(tk.Tk):
                 )
         value_label = getattr(self, "box_zoom_value_label", None)
         if value_label is not None and value_label.winfo_exists():
-            value_label.configure(text=f"{self._box_zoom_percent()}%")
+            value_label.configure(text=msg('{0}%', self._box_zoom_percent()))
         grid = self.box_grid_widget
         if grid is not None and grid.winfo_exists():
             grid.update_idletasks()
@@ -5737,12 +5765,12 @@ class FreezerManagerApp(tk.Tk):
     def _box_status_text(self, code: str) -> str:
         if self.box_batch_mode:
             occupied = sum(self.repository.get_box_sample(code, position).occupied for position in self.selected_box_positions)
-            return f"已选 {len(self.selected_box_positions)} 个孔位 · 其中 {occupied} 个已有细胞"
+            return msg('已选 {0} 个孔位 · 其中 {1} 个已有细胞', len(self.selected_box_positions), occupied)
         layout = self.repository.get_box_layout(code)
         used = len(self.repository.get_box_samples(code))
-        status = f"盒内库存：{used} 个已用孔位 · {layout.rows * layout.columns - used} 个空孔"
+        status = msg('盒内库存：{0} 个已用孔位 · {1} 个空孔', used, layout.rows * layout.columns - used)
         if self.box_quick_move_mode:
-            status += " · 快捷移动已开启：直接拖动已有细胞到空孔"
+            status += msg(' · 快捷移动已开启：直接拖动已有细胞到空孔')
         return status
 
     def _style_box_position(self, code: str, position: str) -> None:
@@ -5780,7 +5808,7 @@ class FreezerManagerApp(tk.Tk):
         used = len(self.repository.get_box_samples(code))
         title_label = getattr(self, "box_title_summary_label", None)
         if title_label is not None and title_label.winfo_exists():
-            title_label.configure(text=f"盒位 {code} · {layout.rows}×{layout.columns} · 已使用 {used}/{layout.rows * layout.columns}")
+            title_label.configure(text=msg('盒位 {0} · {1}×{2} · 已使用 {3}/{4}', code, layout.rows, layout.columns, used, layout.rows * layout.columns))
         status_label = getattr(self, "box_batch_status_label", None)
         if status_label is not None and status_label.winfo_exists():
             status_label.configure(text=self._box_status_text(code))
@@ -5823,9 +5851,9 @@ class FreezerManagerApp(tk.Tk):
             return
         rows, columns = selected_layout
         try:
-            self.repository.configure_box(code, rows, columns, f"细胞冻存盒 {code}")
+            self.repository.configure_box(code, rows, columns, msg('细胞冻存盒 {0}', code))
         except (OSError, ValueError) as exc:
-            self._notify("布局保存失败", str(exc), danger=True)
+            self._notify(msg('布局保存失败'), str(exc), danger=True)
             return
         self._update_sidebar_summary()
         self.box_page_visible = False
@@ -5835,7 +5863,7 @@ class FreezerManagerApp(tk.Tk):
         sample = self.repository.get_box_sample(code, position)
         was_occupied = sample.occupied
         dialog_sample = sample if was_occupied else BoxSample(stored_date=date.today().isoformat())
-        title = f"编辑细胞 · {code}/{position}" if was_occupied else f"入库细胞 · {code}/{position}"
+        title = msg('编辑细胞 · {0}/{1}', code, position) if was_occupied else msg('入库细胞 · {0}/{1}', code, position)
         result = BoxSampleDialog(self, title, dialog_sample, allow_clear=was_occupied).show()
         if result is None:
             return
@@ -5843,15 +5871,14 @@ class FreezerManagerApp(tk.Tk):
             checkout = BatchOutboundDialog(
                 self,
                 1,
-                f"{self.repository.freezer_name} / 冻存盒 {code}/{position}",
+                msg('{0} / 冻存盒 {1}/{2}', self.repository.freezer_name, code, position),
             ).show()
             if checkout is None:
                 return
             operator, operation_date = checkout
             if not self._ask_confirm(
-                "确认出库",
-                f"确定将 {code}/{position} 中的细胞“{sample.sample_name}”出库吗？\n"
-                f"出库人：{operator}\n出库日期：{operation_date}",
+                msg('确认出库'),
+                msg('确定将 {0}/{1} 中的细胞“{2}”出库吗？\n出库人：{3}\n出库日期：{4}', code, position, sample.sample_name, operator, operation_date),
                 danger=True,
             ):
                 return
@@ -5860,50 +5887,50 @@ class FreezerManagerApp(tk.Tk):
                     code, [position], operator, operation_date
                 )
             except (OSError, ValueError) as exc:
-                self._notify("出库失败", str(exc), danger=True)
+                self._notify(msg('出库失败'), str(exc), danger=True)
                 return
             self._refresh_box_page_state(code, [position])
             self._update_sidebar_summary()
-            self._notify("出库完成", f"{code}/{position} 已出库，并写入出入库登记。")
+            self._notify(msg('出库完成'), msg('{0}/{1} 已出库，并写入出入库登记。', code, position))
             return
         if result.get("__action__") == "clear":
             if not self._ask_confirm(
-                "确认清空孔位",
-                f"第一次确认：确定要清空 {code}/{position} 中的细胞“{sample.sample_name}”吗？",
+                msg('确认清空孔位'),
+                msg('第一次确认：确定要清空 {0}/{1} 中的细胞“{2}”吗？', code, position, sample.sample_name),
                 danger=True,
             ):
                 return
             if not self._ask_confirm(
-                "再次确认清空",
-                f"第二次确认：清空后该孔位会变为空闲，但操作会保留在出入库登记中。\n\n确定继续吗？",
+                msg('再次确认清空'),
+                msg('第二次确认：清空后该孔位会变为空闲，但操作会保留在出入库登记中。\n\n确定继续吗？'),
                 danger=True,
             ):
                 return
             try:
                 self.repository.set_box_sample(code, position, BoxSample())
             except (OSError, ValueError) as exc:
-                self._notify("清空失败", str(exc), danger=True)
+                self._notify(msg('清空失败'), str(exc), danger=True)
                 return
             self._refresh_box_page_state(code, [position])
             self._update_sidebar_summary()
             return
         if result["stored_date"] and not self._valid_date(result["stored_date"]):
-            self._notify("日期格式不正确", "入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。", danger=True)
+            self._notify(msg('日期格式不正确'), msg('入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'), danger=True)
             return
         try:
             self.repository.set_box_sample(code, position, BoxSample(**result))
         except (OSError, ValueError) as exc:
-            self._notify("保存失败", str(exc), danger=True)
+            self._notify(msg('保存失败'), str(exc), danger=True)
             return
         self._refresh_box_page_state(code, [position])
         self._update_sidebar_summary()
         if not was_occupied:
-            self._notify("入库完成", f"细胞已存入 {code}/{position}，并写入出入库登记。")
+            self._notify(msg('入库完成'), msg('细胞已存入 {0}/{1}，并写入出入库登记。', code, position))
 
     def batch_edit_box_positions(self, code: str) -> None:
         positions = sorted(self.selected_box_positions)
         if not positions:
-            self._notify("尚未选择孔位", "请先选择需要批量入库的孔位。", danger=True)
+            self._notify(msg('尚未选择孔位'), msg('请先选择需要批量入库的孔位。'), danger=True)
             return
         occupied = [
             position
@@ -5912,103 +5939,103 @@ class FreezerManagerApp(tk.Tk):
         ]
         if occupied:
             self._notify(
-                "所选孔位已有细胞",
-                f"以下孔位已有细胞，不能批量入库：\n{compact_box_positions(occupied)}\n\n"
-                "请先出库或清除这些孔位，再重新进行批量入库。",
+                msg('所选孔位已有细胞'),
+                msg('以下孔位已有细胞，不能批量入库：\n{0}\n\n请先出库或清除这些孔位，再重新进行批量入库。', compact_box_positions(occupied)),
                 danger=True,
             )
             return
-        result = BoxSampleDialog(self, f"批量入库 · {len(positions)} 个孔位", BoxSample(stored_date=date.today().isoformat()), batch=True).show()
+        result = BoxSampleDialog(self, msg('批量入库 · {0} 个孔位', len(positions)), BoxSample(stored_date=date.today().isoformat()), batch=True).show()
         if result is None:
             return
         if result["stored_date"] and not self._valid_date(result["stored_date"]):
-            self._notify("日期格式不正确", "入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。", danger=True)
+            self._notify(msg('日期格式不正确'), msg('入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'), danger=True)
             return
         try:
             count = self.repository.batch_set_box_samples(code, positions, BoxSample(**result))
         except (OSError, ValueError) as exc:
-            self._notify("批量入库失败", str(exc), danger=True)
+            self._notify(msg('批量入库失败'), str(exc), danger=True)
             return
         changed_positions = tuple(positions)
         self.selected_box_positions.clear()
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
-        self._notify("批量入库完成", f"已入库 {count} 支冻存管，并写入出入库登记。")
+        self._notify(msg('批量入库完成'), msg('已入库 {0} 支冻存管，并写入出入库登记。', count))
 
     def batch_checkout_box_positions(self, code: str) -> None:
         positions = sorted(self.selected_box_positions, key=self.repository.parse_box_position)
         if not positions:
-            self._notify("尚未选择孔位", "请先选择需要批量出库的孔位。", danger=True)
+            self._notify(msg('尚未选择孔位'), msg('请先选择需要批量出库的孔位。'), danger=True)
             return
         empty = [position for position in positions if not self.repository.get_box_sample(code, position).occupied]
         if empty:
             self._notify(
-                "所选孔位包含空孔",
-                f"以下孔位没有细胞，不能出库：\n{compact_box_positions(empty)}\n\n请取消这些孔位后重新操作。",
+                msg('所选孔位包含空孔'),
+                msg('以下孔位没有细胞，不能出库：\n{0}\n\n请取消这些孔位后重新操作。', compact_box_positions(empty)),
                 danger=True,
             )
             return
         result = BatchOutboundDialog(
             self,
             len(positions),
-            f"{self.repository.freezer_name} / 冻存盒 {code}",
+            msg('{0} / 冻存盒 {1}', self.repository.freezer_name, code),
         ).show()
         if result is None:
             return
         operator, operation_date = result
         names = sorted({self.repository.get_box_sample(code, position).sample_name for position in positions})
-        preview = "、".join(names[:5]) + (f" 等 {len(names)} 种" if len(names) > 5 else "")
+        preview = join_text('、', names[:5]) + (msg(' 等 {0} 种', len(names)) if len(names) > 5 else "")
         if not self._ask_confirm(
-            "确认批量出库",
-            f"将出库 {len(positions)} 支冻存管。\n细胞：{preview}\n孔位：{compact_box_positions(positions)}\n出库人：{operator}\n出库日期：{operation_date}",
+            msg('确认批量出库'),
+            msg('将出库 {0} 支冻存管。\n细胞：{1}\n孔位：{2}\n出库人：{3}\n出库日期：{4}', len(positions), preview, compact_box_positions(positions), operator, operation_date),
             danger=True,
         ):
             return
         try:
             count = self.repository.batch_checkout_box_samples(code, positions, operator, operation_date)
         except (OSError, ValueError) as exc:
-            self._notify("批量出库失败", str(exc), danger=True)
+            self._notify(msg('批量出库失败'), str(exc), danger=True)
             return
         changed_positions = tuple(positions)
         self.selected_box_positions.clear()
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
-        self._notify("批量出库完成", f"已出库 {count} 支冻存管，并写入出入库登记。")
+        self._notify(msg('批量出库完成'), msg('已出库 {0} 支冻存管，并写入出入库登记。', count))
 
     def batch_clear_box_positions(self, code: str) -> None:
         occupied = [position for position in self.selected_box_positions if self.repository.get_box_sample(code, position).occupied]
         if not occupied:
-            self._notify("没有可清空细胞", "所选孔位中没有已有细胞。", danger=True)
+            self._notify(msg('没有可清空细胞'), msg('所选孔位中没有已有细胞。'), danger=True)
             return
-        if not self._ask_confirm("确认清除", f"第一次确认：确定清除选中的 {len(occupied)} 个细胞记录吗？", danger=True):
+        if not self._ask_confirm(msg('确认清除'), msg('第一次确认：确定清除选中的 {0} 个细胞记录吗？', len(occupied)), danger=True):
             return
-        if not self._ask_confirm("再次确认清除", "第二次确认：清除不计入正常出库，但会保留一条清除登记。\n\n确定继续吗？", danger=True):
+        if not self._ask_confirm(msg('再次确认清除'), msg('第二次确认：清除不计入正常出库，但会保留一条清除登记。\n\n确定继续吗？'), danger=True):
             return
         try:
             count = self.repository.batch_clear_box_samples(code, occupied)
         except OSError as exc:
-            self._notify("批量清空失败", str(exc), danger=True)
+            self._notify(msg('批量清空失败'), str(exc), danger=True)
             return
         changed_positions = tuple(occupied)
         self.selected_box_positions.clear()
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
-        self._notify("清除完成", f"已清除 {count} 个盒内细胞记录，并写入出入库登记。")
+        self._notify(msg('清除完成'), msg('已清除 {0} 个盒内细胞记录，并写入出入库登记。', count))
 
     @staticmethod
     def _unit_detail_line(parent: tk.Misc, label: str, value: str) -> None:
-        tk.Label(parent, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(5, 0))
-        tk.Label(parent, text=value, bg=COLORS["panel"], fg=COLORS["text"], wraplength=145, justify="left", font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
+        ui.Label(parent, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(5, 0))
+        ui.Label(parent, text=value, bg=COLORS["panel"], fg=COLORS["text"], wraplength=145, justify="left", font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w")
 
     def show_editor(self, code: str) -> None:
         self._set_active_nav("overview")
         parsed = parse_unit_code(code)
         if parsed is None:
             return
-        self.page_title_var.set(f"编辑冻存盒位 · {self.repository.freezer_name}")
+        self.page_title_var.set(msg('编辑冻存盒位 · {0}', self.repository.freezer_name))
         column, layer = parsed
         record = self.repository.get(code)
         self.clear_content()
+        self._inline_editor_active = True
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
         page = scroll.body
@@ -6017,10 +6044,10 @@ class FreezerManagerApp(tk.Tk):
         nav = ttk.Frame(page, style="Page.TFrame")
         nav.grid(row=0, column=0, sticky="ew", padx=28, pady=(22, 16))
         if self.box_search_return_mode == "basic":
-            back_text = "←  返回搜索结果"
+            back_text = msg('←  返回搜索结果')
             back_command = self.show_search_results
         else:
-            back_text = f"←  返回冻存盒位 {code}"
+            back_text = msg('←  返回冻存盒位 {0}', code)
             back_command = lambda: self.show_compartment(column, layer)
         RoundedButton(
             nav,
@@ -6038,8 +6065,8 @@ class FreezerManagerApp(tk.Tk):
         ).pack(side="left")
         title_box = ttk.Frame(nav, style="Page.TFrame")
         title_box.pack(side="left", padx=18)
-        ttk.Label(title_box, text=f"编辑冻存盒位 {code}", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text=f"第{column}列 · 第{layer}层", style="PageMuted.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('编辑冻存盒位 {0}', code), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=msg('第{0}列 · 第{1}层', column, layer), style="PageMuted.TLabel").pack(anchor="w")
 
         panel = self._panel(page)
         panel.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 26))
@@ -6054,33 +6081,33 @@ class FreezerManagerApp(tk.Tk):
             if key != "notes"
         }
         fields = [
-            ("sample_name", "细胞名称 *", "请输入细胞名称", "entry"),
-            ("stored_date", "入库日期 *", "YYYY-MM-DD 或 YYYYMMDD", "entry"),
-            ("experiment_id", "实验编号", "如 BEBT-EF-0001，可留空", "entry"),
-            ("sample_type", "细胞类别", "请选择或输入细胞类别", "combo"),
-            ("sample_count", "细胞数量", "如 20", "entry"),
-            ("sample_date", "采样日期", "YYYY-MM-DD 或 YYYYMMDD，可留空", "entry"),
-            ("stored_by", "入库人", "请输入入库人姓名，可留空", "entry"),
-            ("claimed_by", "领用人", "未领用可留空", "entry"),
-            ("claimed_date", "领用日期", "YYYY-MM-DD，未领用可留空", "entry"),
-            ("claimed_amount", "领用量", "如 2 管、500 μL", "entry"),
+            ("sample_name", msg('细胞名称 *'), msg('请输入细胞名称'), "entry"),
+            ("stored_date", msg('入库日期 *'), msg('YYYY-MM-DD 或 YYYYMMDD'), "entry"),
+            ("experiment_id", msg('实验编号'), msg('如 BEBT-EF-0001，可留空'), "entry"),
+            ("sample_type", msg('细胞类别'), msg('请选择或输入细胞类别'), "combo"),
+            ("sample_count", msg('细胞数量'), msg('如 20'), "entry"),
+            ("sample_date", msg('采样日期'), msg('YYYY-MM-DD 或 YYYYMMDD，可留空'), "entry"),
+            ("stored_by", msg('入库人'), msg('请输入入库人姓名，可留空'), "entry"),
+            ("claimed_by", msg('领用人'), msg('未领用可留空'), "entry"),
+            ("claimed_date", msg('领用日期'), msg('YYYY-MM-DD，未领用可留空'), "entry"),
+            ("claimed_amount", msg('领用量'), msg('如 2 管、500 μL'), "entry"),
         ]
         for index, (key, label, hint, kind) in enumerate(fields):
             row, column_index = divmod(index, 2)
             field = tk.Frame(form, bg=COLORS["panel"])
             field.grid(row=row, column=column_index, sticky="ew", padx=(0 if column_index == 0 else 12, 12 if column_index == 0 else 0), pady=9)
-            tk.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            ui.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
             if kind == "combo":
-                widget = ttk.Combobox(field, textvariable=self.form_vars[key], values=("肿瘤细胞", "原代细胞", "干细胞", "免疫细胞", "细胞系", "其他"), font=("Microsoft YaHei UI", 10))
+                widget = ui.Combobox(field, textvariable=self.form_vars[key], values=(msg('肿瘤细胞'), msg('原代细胞'), msg('干细胞'), msg('免疫细胞'), msg('细胞系'), msg('其他')), font=("Microsoft YaHei UI", 10))
             else:
                 widget = ttk.Entry(field, textvariable=self.form_vars[key], font=("Microsoft YaHei UI", 10))
             widget.pack(fill="x")
             _bind_ime_safe_return(widget, lambda value=code: self.save_editor(value))
-            tk.Label(field, text=hint, bg=COLORS["panel"], fg="#98A2B3", font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(4, 0))
+            ui.Label(field, text=hint, bg=COLORS["panel"], fg="#98A2B3", font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(4, 0))
 
         notes_field = tk.Frame(form, bg=COLORS["panel"])
         notes_field.grid(row=5, column=0, columnspan=2, sticky="ew", pady=9)
-        tk.Label(notes_field, text="备注", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+        ui.Label(notes_field, text=msg('备注'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
         self.notes_text = tk.Text(notes_field, height=4, wrap="word", relief="solid", borderwidth=1, highlightthickness=0, font=("Microsoft YaHei UI", 10), fg=COLORS["text"])
         self.notes_text.pack(fill="x")
         self.notes_text.insert("1.0", record.notes)
@@ -6091,7 +6118,7 @@ class FreezerManagerApp(tk.Tk):
         actions.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(18, 0))
         RoundedButton(
             actions,
-            text="保存记录",
+            text=msg('保存记录'),
             command=lambda: self.save_editor(code),
             fill=COLORS["primary"],
             hover_fill=COLORS["primary_dark"],
@@ -6102,7 +6129,7 @@ class FreezerManagerApp(tk.Tk):
         ).pack(side="right")
         RoundedButton(
             actions,
-            text="取消",
+            text=msg('取消'),
             command=lambda: self.show_compartment(column, layer),
             fill="#E8EDF4",
             foreground=COLORS["text"],
@@ -6117,7 +6144,7 @@ class FreezerManagerApp(tk.Tk):
         if record.occupied:
             RoundedButton(
                 actions,
-                text="清空此冻存盒",
+                text=msg('清空此冻存盒'),
                 command=lambda: self.clear_unit(code),
                 fill="#FCECEC",
                 foreground=COLORS["danger"],
@@ -6152,31 +6179,31 @@ class FreezerManagerApp(tk.Tk):
         values["notes"] = self.notes_text.get("1.0", "end-1c").strip()
         missing_labels = [
             label
-            for key, label in (("sample_name", "细胞名称"), ("stored_date", "入库日期"))
+            for key, label in (("sample_name", msg('细胞名称')), ("stored_date", msg('入库日期')))
             if not values[key]
         ]
         if missing_labels:
-            self._notify("信息未填写完整", "请填写：" + "、".join(missing_labels), danger=True)
+            self._notify(msg('信息未填写完整'), msg('请填写：') + join_text('、', missing_labels), danger=True)
             return
         if not self._valid_date(values["stored_date"]):
-            self._notify("日期格式不正确", "入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。", danger=True)
+            self._notify(msg('日期格式不正确'), msg('入库日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'), danger=True)
             return
         if values["sample_date"] and not self._valid_date(values["sample_date"]):
-            self._notify("日期格式不正确", "采样日期请填写为 YYYY-MM-DD 或 YYYYMMDD。", danger=True)
+            self._notify(msg('日期格式不正确'), msg('采样日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'), danger=True)
             return
         if values["claimed_date"] and not self._valid_date(values["claimed_date"]):
-            self._notify("日期格式不正确", "领用日期请填写为 YYYY-MM-DD 或 YYYYMMDD。", danger=True)
+            self._notify(msg('日期格式不正确'), msg('领用日期请填写为 YYYY-MM-DD 或 YYYYMMDD。'), danger=True)
             return
         if values["sample_count"] and not values["sample_count"].isdigit():
-            self._notify("细胞数量不正确", "细胞数量应填写非负整数。", danger=True)
+            self._notify(msg('细胞数量不正确'), msg('细胞数量应填写非负整数。'), danger=True)
             return
         try:
             self.repository.set(code, UnitRecord(**values))
         except OSError as exc:
-            self._notify("保存失败", f"无法写入本地数据文件：\n{exc}", danger=True)
+            self._notify(msg('保存失败'), msg('无法写入本地数据文件：\n{0}', exc), danger=True)
             return
         self._update_sidebar_summary()
-        self._notify("保存成功", f"冻存盒 {code} 已保存。")
+        self._notify(msg('保存成功'), msg('冻存盒 {0} 已保存。', code))
         parsed = parse_unit_code(code)
         if parsed:
             self.show_compartment(*parsed)
@@ -6184,15 +6211,15 @@ class FreezerManagerApp(tk.Tk):
     def clear_unit(self, code: str) -> None:
         record = self.repository.get(code)
         if not self._ask_confirm(
-            "确认清空",
-            f"确定清空冻存盒 {code} 中的记录“{record.sample_name or record.experiment_id}”吗？\n此操作不可撤销。",
+            msg('确认清空'),
+            msg('确定清空冻存盒 {0} 中的记录“{1}”吗？\n此操作不可撤销。', code, record.sample_name or record.experiment_id),
             danger=True,
         ):
             return
         try:
             self.repository.clear(code)
         except OSError as exc:
-            self._notify("清空失败", f"无法写入本地数据文件：\n{exc}", danger=True)
+            self._notify(msg('清空失败'), msg('无法写入本地数据文件：\n{0}', exc), danger=True)
             return
         self._update_sidebar_summary()
         parsed = parse_unit_code(code)
@@ -6200,14 +6227,14 @@ class FreezerManagerApp(tk.Tk):
             self.show_compartment(*parsed)
 
     def export_to_excel(self) -> None:
-        default_name = f"液氮罐总台账_{date.today().strftime('%Y%m%d')}.xlsx"
-        selected = filedialog.asksaveasfilename(
+        default_name = msg('液氮罐总台账_{0}.xlsx', date.today().strftime('%Y%m%d'))
+        selected = ui.asksaveasfilename(
             parent=self,
-            title="导出液氮罐台账",
+            title=msg('导出液氮罐台账'),
             initialdir=str(Path(__file__).parent),
             initialfile=default_name,
             defaultextension=".xlsx",
-            filetypes=(("Excel 工作簿", "*.xlsx"),),
+            filetypes=((msg('Excel 工作簿'), "*.xlsx"),),
         )
         if not selected:
             return
@@ -6234,23 +6261,22 @@ class FreezerManagerApp(tk.Tk):
             export_cryotube_workbook(
                 Path(selected),
                 freezer_exports,
+                language=self.language_state.language,
             )
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
-            self._notify("导出失败", f"无法生成 Excel 文件：\n{exc}", danger=True)
+            self._notify(msg('导出失败'), msg('无法生成 Excel 文件：\n{0}', exc), danger=True)
             return
         self._notify(
-            "导出完成",
-            "Excel 台账已生成。\n\n"
-            f"文件：{Path(selected).name}\n"
-            f"已导出 {exported_tube_count} 支冻存管，覆盖 {len(self.repository.list_freezers())} 个未归档液氮罐，并包含管位汇总统计和使用说明。",
+            msg('导出完成'),
+            msg('Excel 台账已生成。\n\n文件：{0}\n已导出 {1} 支冻存管，覆盖 {2} 个未归档液氮罐，并包含管位汇总统计和使用说明。', Path(selected).name, exported_tube_count, len(self.repository.list_freezers())),
         )
 
     def import_from_excel(self) -> None:
-        selected = filedialog.askopenfilename(
+        selected = ui.askopenfilename(
             parent=self,
-            title="从 Excel 导入液氮罐台账",
+            title=msg('从 Excel 导入液氮罐台账'),
             initialdir=str(Path(__file__).parent),
-            filetypes=(("Excel 工作簿", "*.xlsx *.xlsm"),),
+            filetypes=((msg('Excel 工作簿'), "*.xlsx *.xlsm"),),
         )
         if not selected:
             return
@@ -6258,7 +6284,7 @@ class FreezerManagerApp(tk.Tk):
         try:
             preview = preview_freezer_workbook(Path(selected))
         except ValueError as exc:
-            self._notify("无法导入", str(exc), danger=True)
+            self._notify(msg('无法导入'), str(exc), danger=True)
             return
         self.pending_import_path = Path(selected)
         self.pending_import_preview = preview
@@ -6270,7 +6296,7 @@ class FreezerManagerApp(tk.Tk):
         if preview is None or self.pending_import_path is None:
             self.import_from_excel()
             return
-        self.page_title_var.set("Excel 导入预览")
+        self.page_title_var.set(msg('Excel 导入预览'))
         self.clear_content()
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
@@ -6280,67 +6306,68 @@ class FreezerManagerApp(tk.Tk):
         heading.pack(fill="x", pady=(0, 16))
         title_box = ttk.Frame(heading, style="Page.TFrame")
         title_box.pack(side="left")
-        ttk.Label(title_box, text="Excel 导入预览", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(title_box, text=self.pending_import_path.name, style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
-        RoundedButton(heading, text="重新选择", command=self.import_from_excel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10).pack(side="right")
+        ui.TtkLabel(title_box, text=msg('Excel 导入预览'), style="Title.TLabel").pack(anchor="w")
+        ui.TtkLabel(title_box, text=self.pending_import_path.name, style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
+        RoundedButton(heading, text=msg('重新选择'), command=self.import_from_excel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10).pack(side="right")
 
         cards = tk.Frame(page, bg=COLORS["bg"])
         cards.pack(fill="x", pady=(0, 14))
-        values = (("识别液氮罐", len(preview.freezers), COLORS["primary"]), ("有效记录", preview.record_count, COLORS["occupied_text"]), ("错误", preview.error_count, COLORS["danger"]), ("提醒", preview.warning_count, "#C77B16"))
+        values = ((msg('识别液氮罐'), len(preview.freezers), COLORS["primary"]), (msg('有效记录'), preview.record_count, COLORS["occupied_text"]), (msg('错误'), preview.error_count, COLORS["danger"]), (msg('提醒'), preview.warning_count, "#C77B16"))
         for index, (label, value, color) in enumerate(values):
             cards.columnconfigure(index, weight=1)
             card = self._panel(cards)
             card.grid(row=0, column=index, sticky="ew", padx=(0 if index == 0 else 8, 0))
-            tk.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=16, pady=(13, 2))
-            tk.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 18, "bold")).pack(anchor="w", padx=16, pady=(0, 13))
+            ui.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=16, pady=(13, 2))
+            ui.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 18, "bold")).pack(anchor="w", padx=16, pady=(0, 13))
 
         summary_panel = self._panel(page)
         summary_panel.pack(fill="x", pady=(0, 14))
-        tk.Label(summary_panel, text="将要处理的液氮罐", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
+        ui.Label(summary_panel, text=msg('将要处理的液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
         for name, records in preview.freezers:
-            tk.Label(summary_panel, text=f"• {name}  ·  {len(records)} 条占用记录", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9)).pack(anchor="w", padx=20, pady=3)
+            ui.Label(summary_panel, text=msg('• {0}  ·  {1} 条占用记录', name, len(records)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9)).pack(anchor="w", padx=20, pady=3)
         tk.Frame(summary_panel, height=8, bg=COLORS["panel"]).pack()
 
         issue_panel = self._panel(page)
         issue_panel.pack(fill="both", expand=True)
         issue_header = tk.Frame(issue_panel, bg=COLORS["panel"])
         issue_header.pack(fill="x", padx=18, pady=(14, 8))
-        tk.Label(issue_header, text="校验结果", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+        ui.Label(issue_header, text=msg('校验结果'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
         if preview.issues:
-            RoundedButton(issue_header, text="导出问题清单", command=self.export_import_issues, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=118, height=34, radius=9).pack(side="right")
+            RoundedButton(issue_header, text=msg('导出问题清单'), command=self.export_import_issues, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=118, height=34, radius=9).pack(side="right")
         if not preview.issues:
-            tk.Label(issue_panel, text="✓ 未发现格式或数据问题，可以继续导入。", bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 10, "bold"), pady=22).pack()
+            ui.Label(issue_panel, text=msg('✓ 未发现格式或数据问题，可以继续导入。'), bg=COLORS["panel"], fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 10, "bold"), pady=22).pack()
         for issue in preview.issues[:100]:
             row = tk.Frame(issue_panel, bg=COLORS["panel"])
             row.pack(fill="x", padx=18, pady=5)
-            color = COLORS["danger"] if issue.severity == "错误" else "#C77B16"
-            tk.Label(row, text=issue.severity, width=5, bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
-            tk.Label(row, text=f"{issue.sheet} · 第 {issue.row} 行 · {issue.field}", width=30, anchor="w", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9)).pack(side="left")
-            tk.Label(row, text=issue.message, anchor="w", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left", fill="x", expand=True)
+            color = COLORS["danger"] if issue.severity == msg('错误') else "#C77B16"
+            ui.Label(row, text=msg(issue.severity), width=8, bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
+            ui.Label(row, text=msg('{0} · 第 {1} 行 · {2}', issue.sheet, issue.row, msg(issue.field)), width=30, anchor="w", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9)).pack(side="left")
+            ui.Label(row, text=error_message(issue.message), anchor="w", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8), justify='left', wraplength=440).pack(side="left", fill="x", expand=True)
         actions = tk.Frame(page, bg=COLORS["bg"])
         actions.pack(fill="x", pady=(14, 0))
         if preview.can_import:
-            RoundedButton(actions, text="继续选择导入方式", command=self.commit_pending_import, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["bg"], width=168, height=42, radius=11).pack(side="right")
+            RoundedButton(actions, text=msg('继续选择导入方式'), command=self.commit_pending_import, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["bg"], width=168, height=42, radius=11).pack(side="right")
         else:
-            tk.Label(actions, text="存在错误，已暂停导入。请按问题清单修改 Excel 后重新选择。", bg=COLORS["bg"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="right")
+            ui.Label(actions, text=msg('存在错误，已暂停导入。请按问题清单修改 Excel 后重新选择。'), bg=COLORS["bg"], fg=COLORS["danger"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="right")
 
     def export_import_issues(self) -> None:
         preview = self.pending_import_preview
         if preview is None or not preview.issues:
             return
-        selected = filedialog.asksaveasfilename(parent=self, title="导出导入问题清单", initialdir=str(Path(__file__).parent), initialfile="Excel导入问题清单.csv", defaultextension=".csv", filetypes=(("CSV 文件", "*.csv"),))
+        selected = ui.asksaveasfilename(parent=self, title=msg('导出导入问题清单'), initialdir=str(Path(__file__).parent), initialfile=msg('Excel导入问题清单.csv'), defaultextension=".csv", filetypes=((msg('CSV 文件'), "*.csv"),))
         if not selected:
             return
         try:
             with Path(selected).open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.writer(handle)
-                writer.writerow(("级别", "工作表", "行号", "字段", "原值", "说明"))
+                writer.writerow(ui.display(self, msg(label)) for label in ('级别', '工作表', '行号', '字段', '原值', '说明'))
                 for issue in preview.issues:
-                    writer.writerow((issue.severity, issue.sheet, issue.row, issue.field, issue.value, issue.message))
+                    writer.writerow((ui.display(self, msg(issue.severity)), issue.sheet, issue.row,
+                                     ui.display(self, msg(issue.field)), issue.value, ui.display(self, error_message(issue.message))))
         except OSError as exc:
-            self._notify("导出失败", str(exc), danger=True)
+            self._notify(msg('导出失败'), str(exc), danger=True)
             return
-        self._notify("导出完成", f"问题清单已保存：{Path(selected).name}")
+        self._notify(msg('导出完成'), msg('问题清单已保存：{0}', Path(selected).name))
 
     def commit_pending_import(self) -> None:
         preview = self.pending_import_preview
@@ -6358,7 +6385,7 @@ class FreezerManagerApp(tk.Tk):
                 overwrite=mode == "overwrite",
             )
         except (OSError, ValueError) as exc:
-            self._notify("导入失败", f"无法写入本地数据：\n{exc}", danger=True)
+            self._notify(msg('导入失败'), msg('无法写入本地数据：\n{0}', exc), danger=True)
             return
 
         self._refresh_freezer_selector()
@@ -6366,13 +6393,11 @@ class FreezerManagerApp(tk.Tk):
         backup_name = (
             self.repository.last_import_backup.name
             if self.repository.last_import_backup is not None
-            else "未生成（原数据文件不存在）"
+            else msg('未生成（原数据文件不存在）')
         )
         self._notify(
-            "导入完成",
-            f"已处理 {stats['freezers']} 个液氮罐、{stats['records']} 条占用记录。\n"
-            f"新增液氮罐：{stats['created']} 个；更新同名液氮罐：{stats['updated']} 个。\n\n"
-            f"导入前备份：{backup_name}",
+            msg('导入完成'),
+            msg('已处理 {0} 个液氮罐、{1} 条占用记录。\n新增液氮罐：{2} 个；更新同名液氮罐：{3} 个。\n\n导入前备份：{4}', stats['freezers'], stats['records'], stats['created'], stats['updated'], backup_name),
         )
         self.show_overview()
 
@@ -6386,7 +6411,7 @@ class FreezerManagerApp(tk.Tk):
             self.search_opened_boxes.clear()
             self.search_session_query = query.casefold()
         self.box_search_return_mode = ""
-        self.page_title_var.set("细胞搜索 · 全部液氮罐")
+        self.page_title_var.set(msg('细胞搜索 · 全部液氮罐'))
         self.clear_content()
         scroll = ScrollableFrame(self.content)
         scroll.pack(fill="both", expand=True)
@@ -6396,7 +6421,7 @@ class FreezerManagerApp(tk.Tk):
         heading.pack(fill="x", pady=(0, 16))
         RoundedButton(
             heading,
-            text="←  返回搜索",
+            text=msg('←  返回搜索'),
             command=self.show_search_page,
             fill="#E8EDF4",
             foreground=COLORS["text"],
@@ -6408,7 +6433,7 @@ class FreezerManagerApp(tk.Tk):
             radius=10,
             font=("Microsoft YaHei UI", 9),
         ).pack(side="left")
-        ttk.Label(heading, text=f"搜索结果：{query}", style="Title.TLabel").pack(side="left", padx=18)
+        ui.TtkLabel(heading, text=msg('搜索结果：{0}', query), style="Title.TLabel").pack(side="left", padx=18)
 
         results = self.repository.search_all_freezer_records(query)
         box_results = self.repository.search_box_samples(query, all_freezers=True)
@@ -6416,7 +6441,7 @@ class FreezerManagerApp(tk.Tk):
         if not results and not box_results:
             empty = self._panel(page)
             empty.pack(fill="x")
-            tk.Label(empty, text="没有找到匹配的细胞或冻存盒孔位", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 11), pady=32).pack()
+            ui.Label(empty, text=msg('没有找到匹配的细胞或冻存盒孔位'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 11), pady=32).pack()
             return
 
         list_panel = self._panel(page)
@@ -6424,16 +6449,16 @@ class FreezerManagerApp(tk.Tk):
         for index, (freezer_id, freezer_name, code, record) in enumerate(results):
             row = tk.Frame(list_panel, bg=COLORS["panel"])
             row.pack(fill="x", padx=18, pady=(12 if index == 0 else 0, 12))
-            tk.Label(row, text=code, width=8, anchor="w", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
+            ui.Label(row, text=code, width=8, anchor="w", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
             detail = tk.Frame(row, bg=COLORS["panel"])
             detail.pack(side="left", fill="x", expand=True)
-            tk.Label(detail, text=record.sample_name or record.experiment_id or "空位", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
-            details = " · ".join(value for value in (record.experiment_id, record.sample_type, record.stored_by, record.stored_date) if value)
-            subtitle = freezer_name + (f" · {details}" if details else "")
-            tk.Label(detail, text=subtitle, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(anchor="w")
+            ui.Label(detail, text=record.sample_name or record.experiment_id or msg('空位'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
+            details = join_text(' · ', (value for value in (record.experiment_id, record.sample_type, record.stored_by, record.stored_date) if value))
+            subtitle = freezer_name + (msg(' · {0}', details) if details else "")
+            ui.Label(detail, text=subtitle, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(anchor="w")
             RoundedButton(
                 row,
-                text="查看 / 编辑",
+                text=msg('查看 / 编辑'),
                 command=lambda owner=freezer_id, value=code: self.open_legacy_search_result(owner, value),
                 fill=COLORS["primary_soft"],
                 foreground=COLORS["primary"],
@@ -6447,7 +6472,7 @@ class FreezerManagerApp(tk.Tk):
             if index < len(results) - 1 or box_groups:
                 tk.Frame(list_panel, height=1, bg=COLORS["line"]).pack(fill="x", padx=18)
         if box_groups:
-            tk.Label(list_panel, text=f"匹配细胞冻存盒 {len(box_groups)} 个 · 共 {len(box_results)} 个孔位", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", padx=18, pady=(12, 4))
+            ui.Label(list_panel, text=msg('匹配细胞冻存盒 {0} 个 · 共 {1} 个孔位', len(box_groups), len(box_results)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", padx=18, pady=(12, 4))
             for group in box_groups:
                 self._render_box_search_group(list_panel, group)
 

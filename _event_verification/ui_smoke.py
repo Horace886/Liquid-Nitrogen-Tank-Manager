@@ -106,6 +106,14 @@ with TemporaryDirectory() as folder:
     ]
     if len(fit_buttons) != 1:
         raise RuntimeError(f"box auto-fit action missing: {len(fit_buttons)}")
+    zoom_buttons = [
+        child for child in descendants(app.content)
+        if isinstance(child, RoundedButton) and child._text in {"− 缩小", "＋ 放大", "适应窗口"}
+    ]
+    if len(zoom_buttons) != 3 or any(button._focus_outline for button in zoom_buttons):
+        raise RuntimeError("box zoom controls still display a focus outline")
+    if any(str(button.cget("takefocus")) != "1" for button in zoom_buttons):
+        raise RuntimeError("box zoom controls lost keyboard accessibility")
     if app.bind_all("<Control-MouseWheel>"):
         raise RuntimeError("Ctrl + mouse-wheel box zoom binding is still active")
     ctrl_zoom_hints = [

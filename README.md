@@ -6,7 +6,17 @@
 
 一个面向 Windows 的本地液氮罐库存管理工具，用于管理液氮罐、冻存盒、盒内孔位、细胞库存和出入库登记。
 
-程序使用 Python、Tkinter 和 SQLite，数据保存在本机，不需要安装第三方 Python 依赖。程序界面目前以中文显示，下方另附英文使用说明。
+程序使用 Python、Tkinter 和 SQLite，数据保存在本机，不需要安装第三方 Python 依赖。界面支持简体中文和 English，下方另附英文使用说明。
+
+### 切换界面语言
+
+左侧底部的“语言 / Language”可切换简体中文和 English，首次默认中文，选择会保存到当前 Windows 用户的 `%LOCALAPPDATA%/LiquidNitrogenTankManager/preferences.json`。切换立即生效，不会重建当前页面；搜索条件、已打开盒子标记及当前液氮罐保持不变。
+
+录入或其他弹窗未关闭时不切换语言，请先保存或取消。不翻译细胞名称、人员、备注或用户自定义液氮罐名称。日期仍使用 `YYYY-MM-DD`。复制或分发程序时请包含 `ui_en.json` 和两个语言界面模块。
+
+Excel 导出跟随当前界面语言：库存台账、出入库登记表的标题、表头、系统状态、汇总页、使用说明和默认文件名均支持中英文；导入问题清单也跟随语言。导入会自动识别中英文表头，不受当前界面语言限制，继续兼容旧版中文台账；同一表内可以混用两种语言，但同一字段不可同时保留中文列和英文列。
+
+库存导出与出入库登记导出仍然分开。正式登记只导出所选日期范围内的普通入库和出库，保留原始人员、日期、位置、细胞信息和备注，不包含快捷移动、清除或历史迁入。登记表不能作为库存台账导入。所有导入仍先校验并创建备份。
 
 ## 主要功能
 
@@ -84,6 +94,7 @@ liquid_nitrogen_tank_storage.db
 - 总览统计卡片将数量和说明分行显示，避免小窗口下挤在一行。
 - 圆角按钮提供约 100 毫秒的悬停颜色过渡，支持快速移入、移出；切页和执行操作不会等待动画。
 - 侧栏按钮仅使用背景高亮，不显示额外焦点框；其他按钮键盘聚焦时显示高对比边框，输入框聚焦时显示蓝色边框。
+- 冻存盒的放大、缩小和适应窗口按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
 
 ## 搜索和批量操作
 
@@ -150,9 +161,15 @@ py -3 _event_verification/ui_polish_smoke.py
 
 添加 `--preview` 可打开 5 分钟的演示窗口，添加 `--compact` 可检查 1000×620 小窗口布局。
 
-## 原项目数据迁移
+## 稳定性与数据安全免责声明
 
-本程序由原“-80°C 冰箱管理”项目调整而来。原项目使用四位储位编号，无法无歧义地自动映射到新的两位液氮罐盒位。迁移原数据时，请使用单独备份文件并人工确认盒位对应关系。
+本软件按“现状”提供，可能存在缺陷、不稳定、兼容性问题或运行中断，不保证持续可用、运行无误或适合任何特定用途。使用本软件可能导致数据丢失、损坏、记录错误或其他数据安全问题。
+
+使用者应自行评估风险，在正式使用前以测试数据验证功能，定期保存独立于本软件的数据库备份并验证其可恢复性。导入、恢复、批量修改或升级前应另行备份，并在操作后核对关键库存记录；请勿将本软件作为重要数据的唯一保存手段。
+
+在适用法律允许的最大范围内，作者及其他许可方不对因使用或无法使用本软件而造成的数据丢失、损坏、泄露或其他相关损失承担责任；法律规定不得排除或限制的责任除外。
+
+本声明为风险提示，不替代或修改 [LICENSE](LICENSE) 中的无担保及责任限制条款。
 
 ## 许可证
 
@@ -175,7 +192,17 @@ py -3 _event_verification/ui_polish_smoke.py
 
 A local Windows desktop application for managing liquid nitrogen tanks, cryoboxes, individual tube positions, cell inventory, and stock-in/stock-out records.
 
-Built with Python, Tkinter, and SQLite, it stores data locally and requires no third-party Python packages. The application interface is currently in Chinese; this section provides English documentation, not an English-language UI.
+Built with Python, Tkinter, and SQLite, it stores data locally and requires no third-party Python packages. The interface supports both Simplified Chinese and English.
+
+### Interface language
+
+Choose **简体中文** or **English** from **语言 / Language** at the bottom of the sidebar. Chinese is the initial default. Your preference is saved per Windows user in `%LOCALAPPDATA%/LiquidNitrogenTankManager/preferences.json`. Switching takes effect in place, preserving the current tank, search criteria and visited-box markers.
+
+Finish or cancel open dialogs before switching. User-entered cell names, people, notes and tank names are never translated. Dates remain `YYYY-MM-DD`. Include `ui_en.json` and both language UI modules when copying or distributing the application.
+
+Excel exports follow the current interface language, including inventory and stock-activity titles, column headings, system statuses, summary sheets, instructions and suggested filenames. Import-issue CSV reports also follow the selected language. Import automatically recognizes Chinese and English headings regardless of interface language, and remains compatible with legacy Chinese workbooks. Mixed-language headings are accepted, but duplicate columns for the same field are rejected.
+
+Inventory and stock-activity exports remain separate. The formal register includes only ordinary stock-in and stock-out records within the selected dates; original people, dates, locations, cell information and notes are preserved. Quick moves, clearing and historical imports are excluded. A stock-activity register cannot be imported as inventory. Import validation and pre-import backups remain in place.
 
 ## Features
 
@@ -319,9 +346,15 @@ py -3 _event_verification/ui_polish_smoke.py
 
 Add `--preview` to keep a demonstration window open for five minutes. Combine it with `--compact` to inspect the 1000×620 compact layout.
 
-## Migrating Data from the Original Project
+## Stability and Data Safety Disclaimer
 
-This application was adapted from an earlier −80°C freezer management project. The original four-digit storage locations cannot be mapped unambiguously to the new two-digit tank locations. When migrating data, use a separate backup and manually confirm the location mapping.
+This software is provided "as is" and may contain defects, instability, compatibility issues, or service interruptions. Continuous availability, error-free operation, and suitability for any particular purpose are not guaranteed. Using the software may result in data loss, corruption, inaccurate records, or other data security issues.
+
+Users should assess these risks, validate functionality with test data before operational use, and regularly keep independent database backups and verify that they can be restored. Create a separate backup before imports, restores, bulk changes, or upgrades, and check critical inventory records afterward. Do not rely on this software as the sole means of storing important data.
+
+To the maximum extent permitted by applicable law, the author and other licensors are not liable for data loss, corruption, disclosure, or other related losses arising from the use of or inability to use this software. This does not exclude or limit liability that cannot lawfully be excluded or limited.
+
+This notice highlights risks and does not replace or modify the warranty disclaimer or limitation of liability in [LICENSE](LICENSE).
 
 ## License
 

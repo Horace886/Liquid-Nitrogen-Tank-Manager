@@ -8,6 +8,9 @@ import zipfile
 from contextlib import closing
 from datetime import date
 from pathlib import Path
+from xml.etree import ElementTree as ET
+
+import liquid_nitrogen_tank_excel as excel
 
 from liquid_nitrogen_tank_excel import (
     export_cryotube_workbook,
@@ -26,6 +29,117 @@ from liquid_nitrogen_tank_store import (
 
 
 class ExcelIoTests(unittest.TestCase):
+    def test_bilingual_inventory_roundtrip_preserves_user_values_and_tank_names(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sample = BoxSample(sample_name='入库', sample_type='Notes', stored_date='2026-08-19',
+                               stored_by='出库', notes='中文备注 & <raw>\nSecond line')
+            names = ['Summary', '使用说明', '研发 "LN2" & a/b', 'instructions']
+            expected = None
+            for language in ('zh', 'en'):
+                output = root / f'{language}.xlsx'
+                export_cryotube_workbook(output, [(name, {('41', 'A2'): sample}, 1620) for name in names], language=language)
+                preview = preview_freezer_workbook(output)
+                self.assertTrue(preview.can_import, preview.issues)
+                self.assertEqual([name for name, _ in preview.freezers], names)
+                self.assertEqual(preview.record_count, 4)
+                if expected is None:
+                    expected = preview.freezers
+                self.assertEqual(preview.freezers, expected)
+                self.assertEqual(preview.freezers[0][1]['41/A2'], sample.as_dict())
+                with zipfile.ZipFile(output) as book:
+                    rows = excel._sheet_rows(book, 'xl/worksheets/sheet2.xml', excel._shared_strings(book))
+                    self.assertEqual(tuple(rows[0].values()), tuple(excel._excel_text(h, language) for h in excel.TUBE_HEADERS))
+                    instructions = book.read('xl/worksheets/sheet6.xml').decode('utf-8')
+                    if language == 'en':
+                        self.assertIn('Cryotube Inventory - Instructions', instructions)
+                        self.assertNotRegex(instructions, r'[\u4e00-\u9fff]')
+                repository = FreezerRepository(root / f'import-{language}.db', root / 'missing.json')
+                repository.import_freezers(preview.freezers, overwrite=True)
+                self.assertEqual(sum(s.occupied for s in repository.box_samples.values()), 4)
+                self.assertTrue(list(repository.backup_dir.glob('*.db')))
+
+    def test_english_empty_and_legacy_workbooks_are_importable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            empty = root / 'empty.xlsx'
+            export_cryotube_workbook(empty, [('Empty Tank', {}, 1620)], language='en')
+            preview = preview_freezer_workbook(empty)
+            self.assertTrue(preview.can_import, preview.issues)
+            self.assertEqual(preview.record_count, 0)
+            legacy = root / 'legacy.xlsx'
+            record = UnitRecord(sample_name='HEK293T', stored_date='2026-08-19', stored_by='Horace', notes='备注')
+            export_freezer_workbook(legacy, [('Legacy', {'11': record}, 4, 5)], language='en')
+            preview = preview_freezer_workbook(legacy)
+            self.assertTrue(preview.can_import, preview.issues)
+            self.assertEqual(preview.freezers[0][1]['11']['notes'], '备注')
+            with zipfile.ZipFile(legacy) as book:
+                summary = book.read('xl/worksheets/sheet1.xml').decode('utf-8')
+                self.assertIn('"Occupied"', summary)
+                self.assertNotIn('已占用', summary)
+                self.assertIn('Occupied', book.read('xl/worksheets/sheet2.xml').decode('utf-8'))
+
+    def test_mixed_case_headers_and_duplicate_aliases_are_validated(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sample = BoxSample(sample_name='A549', stored_date='2026-08-19', stored_by='Horace')
+            original = root / 'original.xlsx'
+            export_cryotube_workbook(original, [('Tank', {('11', 'A1'): sample}, 81)], language='en')
+            with zipfile.ZipFile(original) as book:
+                files = {name: book.read(name) for name in book.namelist()}
+            key = 'xl/worksheets/sheet2.xml'
+            sheet = files[key].decode('utf-8').replace('Box Slot', '  bOx SlOt  ').replace('Cell Name', '细胞名称')
+            mixed = root / 'mixed.xlsx'
+            with zipfile.ZipFile(mixed, 'w') as book:
+                for name, contents in files.items():
+                    book.writestr(name, sheet if name == key else contents)
+            self.assertTrue(preview_freezer_workbook(mixed).can_import)
+            duplicate = root / 'duplicate.xlsx'
+            sheet = sheet.replace('Full Location', 'cell name')
+            with zipfile.ZipFile(duplicate, 'w') as book:
+                for name, contents in files.items():
+                    book.writestr(name, sheet if name == key else contents)
+            preview = preview_freezer_workbook(duplicate)
+            self.assertFalse(preview.can_import)
+            self.assertIn('重复', preview.issues[0].message)
+            missing = root / 'missing.xlsx'
+            sheet = files[key].decode('utf-8').replace('>Horace<', '><')
+            with zipfile.ZipFile(missing, 'w') as book:
+                for name, contents in files.items():
+                    book.writestr(name, sheet if name == key else contents)
+            preview = preview_freezer_workbook(missing)
+            self.assertFalse(preview.can_import)
+            self.assertEqual(preview.issues[0].field, '入库人')
+
+    def test_bilingual_event_register_keeps_notes_and_only_stock_in_out(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository = FreezerRepository(root / 'events.db', root / 'missing.json')
+            sample = BoxSample(sample_name='出库', stored_date='2026-08-19', stored_by='入库', notes='保留备注 & details')
+            repository.batch_set_box_samples('11', ['A1'], sample)
+            repository.move_box_sample('11', 'A1', 'A2')
+            repository.batch_checkout_box_samples('11', ['A2'], '操作人', '2026-08-20')
+            before = repository.path.read_bytes()
+            for language in ('zh', 'en'):
+                output = root / f'events-{language}.xlsx'
+                export_inventory_events_workbook(output, repository.inventory_events, language=language)
+                with zipfile.ZipFile(output) as book:
+                    rows = excel._sheet_rows(book, 'xl/worksheets/sheet1.xml', excel._shared_strings(book))
+                    headers = rows[1]
+                    self.assertEqual(tuple(headers.values()), tuple(excel._excel_text(h, language) for h in excel.EVENT_HEADERS))
+                    data = rows[2:]
+                    self.assertEqual(len(data), 2)
+                    self.assertEqual({r[5] for r in data}, {'入库', '出库'} if language == 'zh' else {'Stock In', 'Stock Out'})
+                    self.assertTrue(all(r[2] == '出库' and r[9] == sample.notes for r in data))
+                    self.assertEqual({r[7] for r in data}, {'入库', '操作人'})
+                    self.assertTrue(all(r[6] == 1 for r in data))
+                    self.assertEqual({excel._import_text(r[1], as_date=True) for r in data}, {'2026-08-19', '2026-08-20'})
+                    self.assertTrue(all(excel._import_text(r[3], as_date=True) == '2026-08-19' for r in data))
+                    self.assertEqual(len(ET.fromstring(book.read('xl/workbook.xml')).findall('x:sheets/x:sheet', excel.NS)), 1)
+                with self.assertRaises(ValueError):
+                    preview_freezer_workbook(output)  # A register is not an inventory template.
+            self.assertEqual(repository.path.read_bytes(), before)
+
     def test_old_database_defaults_to_four_columns_and_five_layers(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
