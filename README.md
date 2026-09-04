@@ -1,8 +1,12 @@
+<a id="chinese"></a>
+
 # 液氮罐管理程序
+
+[简体中文](#chinese) | [English](#english)
 
 一个面向 Windows 的本地液氮罐库存管理工具，用于管理液氮罐、冻存盒、盒内孔位、细胞库存和出入库登记。
 
-程序使用 Python、Tkinter 和 SQLite，数据保存在本机，不需要安装第三方 Python 依赖。
+程序使用 Python、Tkinter 和 SQLite，数据保存在本机，不需要安装第三方 Python 依赖。程序界面目前以中文显示，下方另附英文使用说明。
 
 ## 主要功能
 
@@ -31,11 +35,9 @@
 下载 GitHub 仓库的 ZIP 文件并解压，或者使用 Git 克隆：
 
 ```powershell
-git clone https://github.com/<你的用户名>/liquid-nitrogen-tank-manager.git
-cd liquid-nitrogen-tank-manager
+git clone https://github.com/Horace886/Liquid-Nitrogen-Tank-Manager.git
+cd Liquid-Nitrogen-Tank-Manager
 ```
-
-请将 `<你的用户名>` 替换为实际的 GitHub 用户名。
 
 ### 2. 启动程序
 
@@ -124,6 +126,7 @@ liquid_nitrogen_tank_storage.db
 | `tests/` | 核心自动化测试 |
 | `_event_verification/` | UI 冒烟、性能和专项验证脚本 |
 | `AGENT.md` | 项目维护规则和代码说明 |
+| `LICENSE` | PolyForm Noncommercial 1.0.0 完整许可证 |
 
 ## 运行测试
 
@@ -153,4 +156,180 @@ py -3 _event_verification/ui_polish_smoke.py
 
 ## 许可证
 
-本项目当前未附带开源许可证。若要将仓库公开并允许他人使用、修改或分发，请先选择并添加合适的 `LICENSE` 文件。
+本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。
+
+- 允许在许可证规定的非商业用途范围内使用、修改和分发软件。
+- 分发时须提供完整许可条款或其官方链接，并保留原作者提供的 `Required Notice:` 声明（如有）。
+- 本许可证不授予商业用途的使用权；超出许可范围的商业使用需事先另行获得权利人的授权。
+- 许可证也明确允许教育机构、公共研究机构、慈善组织等所列机构使用，具体范围以原文为准。
+
+以上仅为便于理解的摘要，完整授权条件以 [LICENSE](LICENSE) 中的英文原文为准。
+
+---
+
+<a id="english"></a>
+
+# Liquid Nitrogen Tank Manager
+
+[简体中文](#chinese) | [English](#english)
+
+A local Windows desktop application for managing liquid nitrogen tanks, cryoboxes, individual tube positions, cell inventory, and stock-in/stock-out records.
+
+Built with Python, Tkinter, and SQLite, it stores data locally and requires no third-party Python packages. The application interface is currently in Chinese; this section provides English documentation, not an English-language UI.
+
+## Features
+
+- Manage multiple tanks, including renaming, archiving, and restoring them.
+- View cryobox locations and capacity utilization.
+- Record cell names, categories, experiment IDs, storage dates, operators, and notes.
+- Search for cells across all non-archived tanks and locate matching boxes and tube positions.
+- Find consecutive empty positions within a box for a requested number of tubes.
+- Perform batch stock-in, stock-out, moves, and position clearing.
+- Keep filterable, paginated inventory event history.
+- Import and export Excel workbooks, with automatic database backups before imports.
+- Back up and restore the local SQLite database.
+
+## Requirements
+
+- Windows
+- Python 3; Python 3.11 is recommended
+- Tkinter must be included in the Python installation; Windows installers from the [official Python website](https://www.python.org/downloads/windows/) normally include it
+
+The project currently uses only the Python standard library. No `pip install` step is required.
+
+## Quick Start
+
+### 1. Get the code
+
+Download and extract the repository ZIP file from GitHub, or clone it with Git:
+
+```powershell
+git clone https://github.com/Horace886/Liquid-Nitrogen-Tank-Manager.git
+cd Liquid-Nitrogen-Tank-Manager
+```
+
+### 2. Run the application
+
+On Windows, double-click:
+
+```text
+start_liquid_nitrogen_tank_manager.bat
+```
+
+Alternatively, run the following command in PowerShell from the project directory:
+
+```powershell
+py -3 liquid_nitrogen_tank_manager.py
+```
+
+On first launch, the application creates a local database in the project directory:
+
+```text
+liquid_nitrogen_tank_storage.db
+```
+
+## Data Safety
+
+- `liquid_nitrogen_tank_storage.db` contains local inventory data and must not be committed to GitHub.
+- `backups/` contains database backups and must not be committed to GitHub.
+- Excel and CSV files in the project root may contain real operational data and must not be committed to GitHub.
+- These files are excluded through `.gitignore`, but always review `git status` before committing.
+- The GitHub repository does not contain your local database and is not a substitute for database backups. Store `backups/` safely elsewhere as well.
+- Use temporary directories or database copies for development and testing; never populate the real inventory database with test data.
+
+## Tank and Cryobox Layout
+
+- Each new tank defaults to 4 columns and 5 levels, providing 20 box locations. Each tank can independently be configured with 1–9 columns and 1–9 levels.
+- A box location consists of two digits: column followed by level. For example, `41` means column 4, level 1.
+- Increasing the tank dimensions can be saved directly. Before reducing them, move or clear inventory outside the new range. The application does not automatically relocate or delete tubes.
+- Each box location corresponds to one cryobox. Boxes default to a 9×9 layout, adjustable from 1×1 to 20×20.
+- Each occupied position represents one cryovial.
+- The position grid supports zooming, fit-to-window sizing, and horizontal or vertical scrolling.
+
+## Interface and Interaction
+
+- The sidebar highlights the current page in blue, and the capacity bar shows tube utilization for the current tank.
+- In shorter windows, the navigation area scrolls and automatically brings keyboard-focused buttons into view. Capacity information remains fixed at the bottom.
+- Overview cards display counts and descriptions on separate lines to prevent crowding in small windows.
+- Rounded buttons use an approximately 100-millisecond hover color transition and support rapid pointer entry and exit. Navigation and actions do not wait for animations.
+- Sidebar buttons use background highlighting without an additional focus outline. Other buttons show a high-contrast border when keyboard-focused, and input fields show a blue focus border.
+
+## Search and Batch Operations
+
+The standard cell search (查找细胞) searches all non-archived tanks and displays the tank, box, and position for each result. Opening a result from another tank automatically switches to that tank and highlights the matching positions.
+
+Advanced search with batch move or batch clear operations is restricted to the current tank to prevent unintended cross-tank changes. Leaving the current box, switching tanks, or opening another box clears temporary states such as batch selections and quick-move mode.
+
+The empty-position search (查找空位) recommends consecutive empty positions within a single box, either in the current tank or across all tanks. Opening a recommendation highlights and selects the suggested positions.
+
+## Stock-in/Stock-out Records
+
+- Regular stock-in and stock-out operations record the operator, operation date, and system timestamp.
+- Clearing, quick moves, undoing moves, corrections, and historical imports do not record an operator.
+- A quick move creates only one stock-in (quick move) event and preserves the original storage information.
+- The event list uses SQLite statistics and pagination. Complete history is retained in the database.
+- The interface loads at most the latest 300 events, and the in-memory cache holds at most the latest 1,000 events.
+
+## Excel Import and Export
+
+The Export Excel action (导出 Excel) generates an inventory workbook with summary statistics, a separate worksheet for each tank, and usage instructions. It does not include the formal stock-in/stock-out register.
+
+The Stock-in/Stock-out Records page (出入库登记) has a separate export action for regular stock-in and stock-out records within a selected date range. Historical imports, clearing, corrections, and quick moves are excluded from this formal register.
+
+When importing Excel files:
+
+- The application shows a preview first.
+- A database backup is created automatically before the import.
+- Box locations must be valid two-digit codes from `11` to `99`, with each digit between 1 and 9. Locations imported into an existing tank must fit its current dimensions.
+- For a newly imported tank, dimensions are inferred from the highest column and level in the inventory, with a minimum of the default 4 columns × 5 levels.
+- Import and export operations themselves do not create stock-in/stock-out events.
+
+## Project Structure
+
+| Path | Purpose |
+| --- | --- |
+| `liquid_nitrogen_tank_manager.py` | Tkinter interface and application entry point |
+| `liquid_nitrogen_tank_store.py` | SQLite storage and business rules |
+| `liquid_nitrogen_tank_excel.py` | Excel import and export |
+| `start_liquid_nitrogen_tank_manager.bat` | Windows double-click launcher |
+| `tests/` | Core automated tests |
+| `_event_verification/` | UI smoke tests, performance checks, and targeted verification scripts |
+| `AGENT.md` | Project maintenance rules and code guidance |
+| `LICENSE` | Full PolyForm Noncommercial 1.0.0 license |
+
+## Running Tests
+
+Run the following command in PowerShell from the project directory:
+
+```powershell
+py -3 -m unittest discover -s tests -v
+```
+
+For changes involving Tkinter screens, date controls, keyboard focus, or Chinese input methods, also run:
+
+```powershell
+py -3 _event_verification/ui_smoke.py
+```
+
+For focused UI styling and animation checks using temporary data:
+
+```powershell
+py -3 _event_verification/ui_polish_smoke.py
+```
+
+Add `--preview` to keep a demonstration window open for five minutes. Combine it with `--compact` to inspect the 1000×620 compact layout.
+
+## Migrating Data from the Original Project
+
+This application was adapted from an earlier −80°C freezer management project. The original four-digit storage locations cannot be mapped unambiguously to the new two-digit tank locations. When migrating data, use a separate backup and manually confirm the location mapping.
+
+## License
+
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+- Use, modification, and distribution are permitted for noncommercial purposes within the scope of the license.
+- When distributing the software, include the license terms or their official URL and retain any `Required Notice:` statements supplied by the licensor.
+- This license does not grant permission for commercial purposes. Commercial use outside its permitted scope requires prior, separate authorization from the rights holder.
+- The license also expressly permits use by listed organizations, including educational institutions, public research organizations, and charities. Refer to the full text for its scope.
+
+This is a summary for convenience. The complete English terms in [LICENSE](LICENSE) govern.
