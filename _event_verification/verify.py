@@ -29,7 +29,7 @@ def main() -> None:
         capacity = sum(
             repository.get_box_layout(code, freezer_id).rows
             * repository.get_box_layout(code, freezer_id).columns
-            for code in all_unit_codes(freezer.storage_columns)
+            for code in all_unit_codes(freezer.storage_columns, freezer.storage_layers)
         )
         payload.append((freezer.name, samples, capacity))
     workbook = Path(__file__).with_name("event_export.xlsx")

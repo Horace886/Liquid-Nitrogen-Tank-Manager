@@ -643,7 +643,7 @@ def unit_code(column: int, layer: int) -> str:
 
 
 def parse_unit_code(code: str) -> tuple[int, int] | None:
-    if not re.fullmatch(r"[1-4][1-5]", code):
+    if not re.fullmatch(r"[1-9][1-9]", code):
         return None
     return tuple(int(char) for char in code)  # type: ignore[return-value]
 
@@ -1322,6 +1322,104 @@ class BoxLayoutDialog(tk.Toplevel):
         return self.result
 
 
+class StorageSpecDialog(tk.Toplevel):
+    """Picker for a tank's column-by-layer specification."""
+
+    def __init__(self, parent: tk.Misc, columns: int, layers: int):
+        super().__init__(parent)
+        self.result: tuple[int, int] | None = None
+        self.current_columns = columns
+        self.current_layers = layers
+        self.title("调整液氮罐规格")
+        self.configure(bg=COLORS["panel"])
+        self.resizable(False, False)
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+        header = tk.Frame(self, bg=COLORS["sidebar"], height=58)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        tk.Label(header, text="调整液氮罐规格", bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=16)
+
+        body = tk.Frame(self, bg=COLORS["panel"])
+        body.pack(fill="both", expand=True, padx=26, pady=20)
+        tk.Label(body, text=f"当前规格：{columns}列 × {layers}层（{columns * layers}个冻存盒位）", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10), anchor="w").pack(fill="x", pady=(0, 16))
+
+        picker = tk.Frame(body, bg=COLORS["panel"])
+        picker.pack(fill="x")
+        picker.columnconfigure(0, weight=1)
+        picker.columnconfigure(2, weight=1)
+        values = tuple(str(value) for value in range(1, 10))
+        self.columns_var = tk.StringVar(value=str(columns))
+        self.layers_var = tk.StringVar(value=str(layers))
+
+        for grid_column, label, variable in (
+            (0, "列数", self.columns_var),
+            (2, "层数", self.layers_var),
+        ):
+            field = tk.Frame(picker, bg=COLORS["panel"])
+            field.grid(row=0, column=grid_column, sticky="ew")
+            tk.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+            picker_widget = ttk.Combobox(field, textvariable=variable, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
+            picker_widget.pack(fill="x")
+            picker_widget.bind("<<ComboboxSelected>>", self._refresh_preview)
+            if grid_column == 0:
+                self.columns_picker = picker_widget
+        tk.Label(picker, text="×", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 18, "bold"), width=3).grid(row=0, column=1, sticky="s", padx=10, pady=(0, 2))
+
+        self.preview_label = tk.Label(body, text="", bg="#F7F9FC", fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w", padx=12, pady=9)
+        self.preview_label.pack(fill="x", pady=(16, 0))
+        self._refresh_preview()
+
+        actions = tk.Frame(body, bg=COLORS["panel"])
+        actions.pack(fill="x", pady=(18, 0))
+        RoundedButton(actions, text="保存规格", command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=104, height=38, radius=10).pack(side="right")
+        RoundedButton(actions, text="取消", command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
+
+        self.bind("<Return>", lambda _event: self._confirm())
+        self.bind("<Escape>", lambda _event: self._cancel())
+        self.update_idletasks()
+        width, height = 470, 335
+        left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
+        top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
+        self.geometry(f"{width}x{height}+{left}+{top}")
+        self.grab_set()
+        self.after(80, self.columns_picker.focus_set)
+
+    def _refresh_preview(self, _event: tk.Event | None = None) -> None:
+        columns = int(self.columns_var.get())
+        layers = int(self.layers_var.get())
+        old_capacity = self.current_columns * self.current_layers
+        new_capacity = columns * layers
+        change = new_capacity - old_capacity
+        change_text = "不变" if change == 0 else f"{'增加' if change > 0 else '减少'} {abs(change)} 个"
+        self.preview_label.configure(text=f"新规格：{columns}列 × {layers}层 · {new_capacity}个盒位 · {change_text}")
+
+    def _confirm(self) -> None:
+        self.result = (int(self.columns_var.get()), int(self.layers_var.get()))
+        self._close()
+
+    def _cancel(self) -> None:
+        self.result = None
+        self._close()
+
+    def _close(self) -> None:
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        try:
+            self.withdraw()
+            self.update_idletasks()
+            self.after_idle(self.destroy)
+        except tk.TclError:
+            pass
+
+    def show(self) -> tuple[int, int] | None:
+        self.wait_window()
+        return self.result
+
+
 class InventoryLocationsDialog(tk.Toplevel):
     """Show every physical box containing one aggregated sample."""
 
@@ -1489,8 +1587,10 @@ class BoxMoveDialog(tk.Toplevel):
         grid_head.pack(fill="x", padx=18, pady=(13, 7))
         tk.Label(grid_head, text="点击空盒位作为目标", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         tk.Label(grid_head, text="绿色可选 · 灰色已占用", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
-        self.grid = tk.Frame(grid_panel, bg=COLORS["panel"])
-        self.grid.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self.grid_scroller = ScrollableFrame(grid_panel, horizontal=True)
+        self.grid_scroller.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self.grid = tk.Frame(self.grid_scroller.body, bg=COLORS["panel"])
+        self.grid.pack(fill="both", expand=True)
 
         footer = tk.Frame(self, bg=COLORS["panel"])
         footer.pack(fill="x")
@@ -1524,15 +1624,20 @@ class BoxMoveDialog(tk.Toplevel):
             child.destroy()
         self.target_buttons.clear()
         target_id = self._target_freezer_id()
-        columns = self.repository.freezers[target_id].storage_columns
+        target = self.repository.freezers[target_id]
+        columns = target.storage_columns
+        layers = target.storage_layers
+        for index in range(10):
+            self.grid.columnconfigure(index, weight=0)
+            self.grid.rowconfigure(index, weight=0)
         for column in range(columns + 1):
             self.grid.columnconfigure(column, weight=1 if column else 0, uniform="move-target")
-        for row in range(6):
+        for row in range(layers + 1):
             self.grid.rowconfigure(row, weight=1 if row else 0)
         tk.Label(self.grid, text="层 / 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
         for column in range(1, columns + 1):
             tk.Label(self.grid, text=f"第 {column} 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
-        for layer in range(1, 6):
+        for layer in range(1, layers + 1):
             tk.Label(self.grid, text=f"第 {layer} 层", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
             for column in range(1, columns + 1):
                 code = compartment_code(column, layer)
@@ -4364,10 +4469,11 @@ class FreezerManagerApp(tk.Tk):
         title_box.pack(side="left")
         ttk.Label(title_box, text=self.repository.freezer_name, style="Title.TLabel").pack(anchor="w")
         storage_columns = self.repository.storage_columns
+        storage_layers = self.repository.storage_layers
         box_capacity = self.repository.storage_capacity
         tube_used = self.repository.tube_used_count
         tube_capacity = self.repository.tube_capacity
-        subtitle = "选择冻存盒位进行批量处理" if self.overview_batch_mode else f"{storage_columns}列 × 5层；点击盒位查看详情或打开盒内孔位"
+        subtitle = "选择冻存盒位进行批量处理" if self.overview_batch_mode else f"{storage_columns}列 × {storage_layers}层；点击盒位查看详情或打开盒内孔位"
         ttk.Label(title_box, text=subtitle, style="PageMuted.TLabel").pack(anchor="w", pady=(3, 0))
         RoundedButton(
             title_row,
@@ -4382,29 +4488,15 @@ class FreezerManagerApp(tk.Tk):
             height=42,
             radius=11,
         ).pack(side="right", padx=(0, 9), pady=3)
-        if storage_columns < 5 and not self.overview_batch_mode:
+        if not self.overview_batch_mode:
             RoundedButton(
                 title_row,
-                text="＋ 添加一列",
-                command=self.add_storage_column,
+                text="调整规格",
+                command=self.configure_storage_dialog,
                 fill=COLORS["primary_soft"],
                 foreground=COLORS["primary"],
                 hover_fill="#DCE8FF",
                 border=COLORS["primary_soft"],
-                canvas_bg=COLORS["bg"],
-                width=116,
-                height=42,
-                radius=11,
-            ).pack(side="right", padx=(0, 9), pady=3)
-        elif storage_columns == 5 and not self.overview_batch_mode:
-            RoundedButton(
-                title_row,
-                text="去除一列",
-                command=self.remove_storage_column,
-                fill="#FCECEC",
-                foreground=COLORS["danger"],
-                hover_fill="#F7DADA",
-                border="#F3D1D1",
                 canvas_bg=COLORS["bg"],
                 width=116,
                 height=42,
@@ -4430,7 +4522,7 @@ class FreezerManagerApp(tk.Tk):
         cards = [
             ("已用冻存管", str(tube_used), f"管 · {used_boxes}个盒", COLORS["primary"]),
             ("剩余管位", str(tube_capacity - tube_used), "个冻存管位", COLORS["occupied_text"]),
-            ("冻存盒位", f"{used_boxes}/{box_capacity}", f"{storage_columns}列×5层", "#805AD5"),
+            ("冻存盒位", f"{used_boxes}/{box_capacity}", f"{storage_columns}列×{storage_layers}层", "#805AD5"),
             ("总体使用率", f"{tube_used / tube_capacity * 100:.1f}%", f"总容量 {tube_capacity} 管", "#E29431"),
         ]
         for index, (label, value, suffix, accent) in enumerate(cards):
@@ -4459,56 +4551,68 @@ class FreezerManagerApp(tk.Tk):
         tk.Frame(legend, width=8, height=8, bg="#D9E0E9").pack(side="left", padx=(0, 6), pady=5)
         tk.Label(legend, text="全部空闲", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left")
 
-        grid = tk.Frame(grid_panel, bg=COLORS["panel"])
-        grid.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        grid_scroller = ScrollableFrame(grid_panel, horizontal=True)
+        grid_scroller.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        grid = tk.Frame(grid_scroller.body, bg=COLORS["panel"])
+        grid.pack(fill="both", expand=True)
         self.overview_compartment_buttons: dict[str, RoundedButton] = {}
         for column in range(storage_columns + 1):
             grid.columnconfigure(column, weight=1 if column else 0, uniform="storage")
-        for row in range(6):
+        for row in range(storage_layers + 1):
             grid.rowconfigure(row, weight=1 if row else 0)
         tk.Label(grid, text="层  /  列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).grid(row=0, column=0, padx=8, pady=4)
         for column in range(1, storage_columns + 1):
             tk.Label(grid, text=f"第 {column} 列", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=0, column=column, pady=4)
-        for layer in range(1, 6):
+        for layer in range(1, storage_layers + 1):
             tk.Label(grid, text=f"第 {layer} 层", bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold")).grid(row=layer, column=0, padx=8)
             for column in range(1, storage_columns + 1):
                 self._compartment_button(grid, column, layer).grid(row=layer, column=column, sticky="nsew", padx=7, pady=6)
 
-    def add_storage_column(self) -> None:
-        if not self._ask_confirm(
-            "添加第5列",
-            "确定为当前液氮罐添加第5列吗？\n添加后将新增 51–55 五个冻存盒位，总容量变为25。",
-        ):
+    def configure_storage_dialog(self) -> None:
+        selected = StorageSpecDialog(
+            self,
+            self.repository.storage_columns,
+            self.repository.storage_layers,
+        ).show()
+        if selected is None:
             return
+        columns, layers = selected
         try:
-            self.repository.add_storage_column()
-        except (OSError, ValueError) as exc:
-            self._notify("添加列失败", str(exc), danger=True)
+            conflicts = self.repository.storage_resize_conflicts(columns, layers)
+        except ValueError as exc:
+            self._notify("规格无效", str(exc), danger=True)
             return
-        self._update_sidebar_summary()
-        self.show_overview()
-
-    def remove_storage_column(self) -> None:
-        occupied = self.repository.fifth_column_occupied_codes()
-        if occupied:
-            self._notify(
-                "无法去除第5列",
-                f"第5列的盒位 {'、'.join(occupied)} 中仍有细胞。\n请先将这些冻存管移动到其他列或清空后再操作。",
-                danger=True,
+        if conflicts:
+            details = "、".join(
+                f"{code}（{self.repository.box_inventory_count(code)}管）"
+                for code in conflicts
             )
-            return
-        if not self._ask_confirm(
-            "去除第5列",
-            "确定去除当前液氮罐的第5列吗？\n51–55 均为空，去除后总容量恢复为20个冻存盒位。",
-            danger=True,
-        ):
+            action = AppDialog(
+                self,
+                title="无法缩小规格",
+                message=(
+                    f"新规格范围外仍有库存：\n{details}\n\n"
+                    "规格尚未改变。请先移动或清空这些冻存盒，再重新调整。"
+                ),
+                buttons=[
+                    ("取消", None, "secondary"),
+                    ("去处理库存", "resolve", "primary"),
+                ],
+                width=520,
+            ).show()
+            if action == "resolve":
+                self.overview_batch_mode = True
+                self.selected_compartments = set(conflicts)
+                self.show_overview()
             return
         try:
-            self.repository.remove_storage_column()
+            self.repository.configure_storage(columns, layers)
         except (OSError, ValueError) as exc:
-            self._notify("去除列失败", str(exc), danger=True)
+            self._notify("规格保存失败", str(exc), danger=True)
             return
-        self.selected_compartments.difference_update({"51", "52", "53", "54", "55"})
+        self.selected_compartments.intersection_update(
+            sqlite_all_unit_codes(columns, layers)
+        )
         self._update_sidebar_summary()
         self.show_overview()
 
@@ -4527,8 +4631,8 @@ class FreezerManagerApp(tk.Tk):
             border=COLORS["primary"] if selected else ("#BFE4D2" if occupied else COLORS["line"]),
             canvas_bg=COLORS["panel"],
             font=("Microsoft YaHei UI", 9, "bold"),
-            width=118 if self.repository.storage_columns == 5 else 148,
-            height=64,
+            width=96 if self.repository.storage_columns > 5 else 118,
+            height=56 if self.repository.storage_layers > 5 else 64,
             radius=10,
         )
         if self.overview_batch_mode:
@@ -6050,7 +6154,9 @@ class FreezerManagerApp(tk.Tk):
                 capacity = sum(
                     self.repository.get_box_layout(code, freezer_id).rows
                     * self.repository.get_box_layout(code, freezer_id).columns
-                    for code in sqlite_all_unit_codes(freezer.storage_columns)
+                    for code in sqlite_all_unit_codes(
+                        freezer.storage_columns, freezer.storage_layers
+                    )
                 )
                 freezer_exports.append((freezer.name, samples, capacity))
             export_cryotube_workbook(

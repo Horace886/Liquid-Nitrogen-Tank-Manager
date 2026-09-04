@@ -21,10 +21,132 @@ from liquid_nitrogen_tank_store import (
     FreezerRepository,
     InventoryEvent,
     UnitRecord,
+    all_unit_codes,
 )
 
 
 class ExcelIoTests(unittest.TestCase):
+    def test_old_database_defaults_to_four_columns_and_five_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            database = root / "legacy.db"
+            with closing(sqlite3.connect(database)) as connection, connection:
+                connection.execute(
+                    """
+                    CREATE TABLE freezers (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                        archived INTEGER NOT NULL DEFAULT 0,
+                        storage_columns INTEGER NOT NULL DEFAULT 4,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO freezers VALUES(?,?,?,?,?)",
+                    ("freezer-1", "液氮罐 1", 0, 4, "2026-08-01T00:00:00"),
+                )
+
+            repository = FreezerRepository(database, root / "missing.json")
+            self.assertEqual(repository.storage_columns, 4)
+            self.assertEqual(repository.storage_layers, 5)
+            self.assertEqual(repository.storage_capacity, 20)
+            with closing(sqlite3.connect(database)) as connection:
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(freezers)")}
+            self.assertIn("storage_layers", columns)
+
+    def test_storage_spec_resize_is_safe_and_keeps_history(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository = FreezerRepository(root / "storage.db", root / "missing.json")
+            repository.configure_storage(7, 6)
+            self.assertEqual(repository.storage_capacity, 42)
+            self.assertEqual(len(all_unit_codes(7, 6)), 42)
+            self.assertTrue(repository.is_storage_code("76"))
+            repository.configure_box("65", 8, 8)
+            repository.set_box_sample(
+                "66",
+                "A1",
+                BoxSample(
+                    sample_name="K562",
+                    stored_date="2026-08-17",
+                    stored_by="Horace",
+                ),
+            )
+            event_count = repository.count_inventory_events()
+
+            self.assertEqual(repository.storage_resize_conflicts(5, 5), ["66"])
+            with self.assertRaisesRegex(ValueError, "66"):
+                repository.configure_storage(5, 5)
+            self.assertEqual((repository.storage_columns, repository.storage_layers), (7, 6))
+            self.assertTrue(repository.get_box_sample("66", "A1").occupied)
+            self.assertEqual(repository.count_inventory_events(), event_count)
+
+            repository.move_boxes(["66"], repository.current_freezer_id, ["11"])
+            repository.configure_storage(5, 5)
+            self.assertEqual((repository.storage_columns, repository.storage_layers), (5, 5))
+            self.assertFalse(repository.is_storage_code("66"))
+            self.assertTrue(repository.get_box_sample("11", "A1").occupied)
+            self.assertNotIn((repository.current_freezer_id, "65"), repository.box_layouts)
+            self.assertEqual(repository.count_inventory_events(), event_count)
+            self.assertTrue(any(event.unit_code == "66" for event in repository.inventory_events))
+            reloaded = FreezerRepository(root / "storage.db", root / "missing.json")
+            self.assertEqual((reloaded.storage_columns, reloaded.storage_layers), (5, 5))
+            self.assertEqual(reloaded.get_box_sample("11", "A1").sample_name, "K562")
+
+    def test_storage_spec_detects_column_and_layer_conflicts(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository = FreezerRepository(root / "storage.db", root / "missing.json")
+            repository.configure_storage(6, 6)
+            sample = BoxSample(
+                sample_name="A549", stored_date="2026-08-17", stored_by="Horace"
+            )
+            repository.set_box_sample("61", "A1", sample)
+            repository.set_box_sample("16", "A1", sample)
+            repository.set("62", UnitRecord(sample_name="历史样品"))
+            self.assertTrue(repository.box_has_samples("62"))
+            self.assertEqual(repository.storage_resize_conflicts(5, 6), ["61", "62"])
+            self.assertEqual(repository.storage_resize_conflicts(6, 5), ["16"])
+            self.assertEqual(repository.storage_resize_conflicts(5, 5), ["16", "61", "62"])
+            with self.assertRaises(ValueError):
+                repository.configure_storage(10, 5)
+
+    def test_excel_import_infers_new_tank_spec_and_rejects_existing_overflow(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sample = BoxSample(sample_name="CHO-K1", stored_by="Horace")
+            workbook = root / "wide-tank.xlsx"
+            export_cryotube_workbook(workbook, [("液氮罐 2", {("76", "A1"): sample}, 81)])
+            preview = preview_freezer_workbook(workbook)
+            self.assertEqual(preview.error_count, 0)
+
+            repository = FreezerRepository(root / "storage.db", root / "missing.json")
+            repository.import_freezers(preview.freezers, overwrite=True)
+            imported = next(
+                freezer for freezer in repository.freezers.values() if freezer.name == "液氮罐 2"
+            )
+            self.assertEqual((imported.storage_columns, imported.storage_layers), (7, 6))
+
+            repository.switch_freezer(next(
+                freezer_id
+                for freezer_id, freezer in repository.freezers.items()
+                if freezer.name == "液氮罐 1"
+            ))
+            repository.set_box_sample(
+                "11",
+                "A1",
+                BoxSample(sample_name="原有库存", stored_date="2026-08-17", stored_by="Horace"),
+            )
+            existing_overflow = [("液氮罐 1", preview.freezers[0][1])]
+            with self.assertRaisesRegex(ValueError, "请先调整液氮罐规格"):
+                repository.import_freezers(existing_overflow, overwrite=True)
+            current = next(
+                freezer for freezer in repository.freezers.values() if freezer.name == "液氮罐 1"
+            )
+            self.assertEqual((current.storage_columns, current.storage_layers), (4, 5))
+            self.assertEqual(repository.get_box_sample("11", "A1").sample_name, "原有库存")
+
     def test_basic_cell_search_can_cover_all_active_freezers(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -345,6 +467,12 @@ class ExcelIoTests(unittest.TestCase):
             self.assertEqual(preview.error_count, 0)
             self.assertEqual(preview.record_count, 1)
             self.assertEqual(preview.freezers[0][1]["11"]["sample_name"], "CHO-K1")
+
+            configurable = Path(folder) / "configurable.xlsx"
+            export_freezer_workbook(configurable, [("液氮罐 2", {"76": record}, 7, 6)])
+            configurable_preview = preview_freezer_workbook(configurable)
+            self.assertEqual(configurable_preview.error_count, 0)
+            self.assertEqual(configurable_preview.freezers[0][1]["76"]["sample_name"], "CHO-K1")
 
 
 if __name__ == "__main__":

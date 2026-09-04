@@ -178,7 +178,11 @@ def _record_value(record: RecordLike | None, name: str) -> str:
     return str(getattr(record, name, "")) if record is not None else ""
 
 
-def _ledger_sheet(records: Mapping[str, RecordLike], storage_columns: int | None = None) -> str:
+def _ledger_sheet(
+    records: Mapping[str, RecordLike],
+    storage_columns: int | None = None,
+    storage_layers: int | None = None,
+) -> str:
     rows = []
     header_cells = "".join(
         _text_cell(f"{_column_name(column)}1", header, 2)
@@ -187,9 +191,15 @@ def _ledger_sheet(records: Mapping[str, RecordLike], storage_columns: int | None
     rows.append(f'<row r="1" ht="28" customHeight="1">{header_cells}</row>')
 
     row_number = 2
-    storage_columns = storage_columns or (5 if any(str(code).startswith("5") for code in records) else 4)
+    coordinates = [
+        (int(str(code)[0]), int(str(code)[1]))
+        for code in records
+        if re.fullmatch(r"[1-9][1-9]", str(code))
+    ]
+    storage_columns = storage_columns or max(4, max((item[0] for item in coordinates), default=4))
+    storage_layers = storage_layers or max(5, max((item[1] for item in coordinates), default=5))
     for column in range(1, storage_columns + 1):
-        for layer in range(1, 6):
+        for layer in range(1, storage_layers + 1):
             code = f"{column}{layer}"
             record = records.get(code)
             occupied = bool(record and record.occupied)
@@ -230,7 +240,7 @@ def _ledger_sheet(records: Mapping[str, RecordLike], storage_columns: int | None
         f'<col min="{index}" max="{index}" width="{width}" customWidth="1"/>'
         for index, width in enumerate(widths, 1)
     )
-    last_row = storage_columns * 5 + 1
+    last_row = storage_columns * storage_layers + 1
     return _worksheet_xml(
         dimension=f"A1:O{last_row}",
         columns=columns,
@@ -241,9 +251,9 @@ def _ledger_sheet(records: Mapping[str, RecordLike], storage_columns: int | None
     )
 
 
-def _summary_sheet(freezers: list[tuple[str, str, Mapping[str, RecordLike], int]]) -> str:
-    used_counts = [sum(bool(record.occupied) for record in records.values()) for _name, _sheet, records, _columns in freezers]
-    capacities = [columns * 5 for _name, _sheet, _records, columns in freezers]
+def _summary_sheet(freezers: list[tuple[str, str, Mapping[str, RecordLike], int, int]]) -> str:
+    used_counts = [sum(bool(record.occupied) for record in records.values()) for _name, _sheet, records, _columns, _layers in freezers]
+    capacities = [columns * layers for _name, _sheet, _records, columns, layers in freezers]
     used_total = sum(used_counts)
     total_capacity = sum(capacities)
     rows = [
@@ -257,7 +267,7 @@ def _summary_sheet(freezers: list[tuple[str, str, Mapping[str, RecordLike], int]
         )
         + "</row>",
     ]
-    for index, ((name, sheet_name, _records, _columns), used, capacity) in enumerate(zip(freezers, used_counts, capacities), 1):
+    for index, ((name, sheet_name, _records, _columns, _layers), used, capacity) in enumerate(zip(freezers, used_counts, capacities), 1):
         row_number = index + 3
         escaped_sheet_name = sheet_name.replace("'", "''")
         last_row = capacity + 1
@@ -307,10 +317,10 @@ def _summary_sheet(freezers: list[tuple[str, str, Mapping[str, RecordLike], int]
 def _instructions_sheet(freezer_count: int) -> str:
     contents = (
         ("使用说明", "本文件由液氮罐管理程序生成。"),
-        ("编号规则", "盒位编号由“列 + 层”组成，共4列、5层。"),
+        ("编号规则", "盒位编号由“列 + 层”组成，两位数字分别使用1–9。"),
         ("编号示例", "41 = 第4列、第1层，对应一个冻存盒位。"),
         ("工作表结构", f"本次导出包含 {freezer_count} 个液氮罐，每个液氮罐对应一个独立工作表。"),
-        ("台账范围", "每个液氮罐工作表固定列出全部20个冻存盒位，空位也会保留。"),
+        ("台账范围", "盒位台账按各液氮罐导出时的列数与层数列出空闲和占用盒位。"),
         ("必填字段", "样品名称和入库日期为必填；其他样品信息可按实际情况填写。"),
         ("筛选方法", "点击台账首行的筛选箭头，可按状态、位置、实验编号或人员筛选。"),
         ("日期格式", "可识别 YYYY-MM-DD 和 YYYYMMDD，导出后按 Excel 日期保存。"),
@@ -429,7 +439,11 @@ def _safe_sheet_names(names: Sequence[str]) -> list[str]:
 
 def export_freezer_workbook(
     path: Path,
-    freezers: Sequence[tuple[str, Mapping[str, RecordLike]] | tuple[str, Mapping[str, RecordLike], int]],
+    freezers: Sequence[
+        tuple[str, Mapping[str, RecordLike]]
+        | tuple[str, Mapping[str, RecordLike], int]
+        | tuple[str, Mapping[str, RecordLike], int, int]
+    ],
 ) -> None:
     """Create one worksheet per freezer, plus summary and instructions sheets."""
     if not freezers:
@@ -437,20 +451,26 @@ def export_freezer_workbook(
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    normalized = [
-        (item[0], item[1], int(item[2]) if len(item) == 3 else (5 if any(str(code).startswith("5") for code in item[1]) else 4))
-        for item in freezers
-    ]
-    freezer_names = [name for name, _records, _columns in normalized]
+    normalized = []
+    for item in freezers:
+        coordinates = [
+            (int(str(code)[0]), int(str(code)[1]))
+            for code in item[1]
+            if re.fullmatch(r"[1-9][1-9]", str(code))
+        ]
+        columns = int(item[2]) if len(item) >= 3 else max(4, max((value[0] for value in coordinates), default=4))
+        layers = int(item[3]) if len(item) == 4 else 5
+        normalized.append((item[0], item[1], columns, layers))
+    freezer_names = [name for name, _records, _columns, _layers in normalized]
     sheet_names = _safe_sheet_names(freezer_names)
     prepared = [
-        (name, sheet_name, records, columns)
-        for (name, records, columns), sheet_name in zip(normalized, sheet_names)
+        (name, sheet_name, records, columns, layers)
+        for (name, records, columns, layers), sheet_name in zip(normalized, sheet_names)
     ]
     sheets: list[tuple[str, str]] = [("汇总统计", _summary_sheet(prepared))]
     sheets.extend(
-        (sheet_name, _ledger_sheet(records, columns))
-        for _name, sheet_name, records, columns in prepared
+        (sheet_name, _ledger_sheet(records, columns, layers))
+        for _name, sheet_name, records, columns, layers in prepared
     )
     sheets.append(("使用说明", _instructions_sheet(len(prepared))))
     worksheet_count = len(sheets)
@@ -669,7 +689,7 @@ def _tube_instructions_sheet(freezer_count: int) -> str:
         ("数量规则", "每个盒内孔位固定对应1支冻存管，因此台账不再设置数量列。"),
         ("必填规则", "细胞名称和入库人为必填项；导入时缺少任一项都会暂停导入。"),
         ("容量口径", "汇总页总管位按每个冻存盒的实际布局计算，未设置时默认9×9。"),
-        ("列数规则", "液氮罐默认4列×5层；已增加第5列的液氮罐按5列×5层统计。"),
+        ("规格规则", "液氮罐默认4列×5层；每个液氮罐可独立调整为1–9列×1–9层。"),
         ("筛选方法", "点击工作表首行的筛选箭头，可按盒位、孔位、细胞名称、日期或人员筛选。"),
     ]
     rows = ['<row r="1" ht="36" customHeight="1">' + _text_cell("A1", "液氮罐冻存管台账 · 使用说明", 1) + "</row>"]
@@ -969,7 +989,7 @@ def preview_freezer_workbook(path: Path) -> ImportPreview:
                             continue
                         if not box_code and not position and not has_sample_data:
                             continue
-                        if not re.fullmatch(r"[1-5][1-5]", box_code):
+                        if not re.fullmatch(r"[1-9][1-9]", box_code):
                             issues.append(
                                 ImportIssue(
                                     "错误",
@@ -1084,7 +1104,7 @@ def preview_freezer_workbook(path: Path) -> ImportPreview:
                     )
                     if not code and not sample_name and not experiment and not has_other_data:
                         continue
-                    if not re.fullmatch(r"[1-5][1-5]", code):
+                    if not re.fullmatch(r"[1-9][1-9]", code):
                         issues.append(ImportIssue("错误", sheet_name, row_number, "盒位编号", code, "盒位编码必须是两位有效编码，例如 41。"))
                         continue
                     if modern_format and not sample_name:

@@ -108,16 +108,16 @@ def unit_code(column: int, layer: int) -> str:
 
 
 def parse_unit_code(code: str) -> tuple[int, int] | None:
-    if not re.fullmatch(r"[1-5][1-5]", code):
+    if not re.fullmatch(r"[1-9][1-9]", code):
         return None
     return tuple(int(char) for char in code)  # type: ignore[return-value]
 
 
-def all_unit_codes(columns: int = 4) -> list[str]:
+def all_unit_codes(columns: int = 4, layers: int = 5) -> list[str]:
     return [
         unit_code(column, layer)
         for column in range(1, columns + 1)
-        for layer in range(1, 6)
+        for layer in range(1, layers + 1)
     ]
 
 
@@ -197,6 +197,7 @@ class FreezerData:
     records: dict[str, UnitRecord]
     archived: bool = False
     storage_columns: int = 4
+    storage_layers: int = 5
 
 
 @dataclass
@@ -263,6 +264,7 @@ class FreezerRepository:
                 name TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 archived INTEGER NOT NULL DEFAULT 0,
                 storage_columns INTEGER NOT NULL DEFAULT 4,
+                storage_layers INTEGER NOT NULL DEFAULT 5,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS unit_records (
@@ -358,6 +360,10 @@ class FreezerRepository:
             connection.execute(
                 "ALTER TABLE freezers ADD COLUMN storage_columns INTEGER NOT NULL DEFAULT 4"
             )
+        if "storage_layers" not in freezer_columns:
+            connection.execute(
+                "ALTER TABLE freezers ADD COLUMN storage_layers INTEGER NOT NULL DEFAULT 5"
+            )
         event_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(inventory_events)")
         }
@@ -452,14 +458,18 @@ class FreezerRepository:
                 self._create_schema(connection)
                 loaded: dict[str, FreezerData] = {}
                 for row in connection.execute(
-                    "SELECT id, name, archived, storage_columns FROM freezers ORDER BY created_at, rowid"
+                    "SELECT id, name, archived, storage_columns, storage_layers FROM freezers ORDER BY created_at, rowid"
                 ):
                     name = str(row["name"])
                     match = re.fullmatch(r"-80°?C?\s*冰箱\s*(\d+)", name, re.IGNORECASE)
                     if match:
                         name = f"液氮罐 {match.group(1)}"
                     loaded[row["id"]] = FreezerData(
-                        name, {}, bool(row["archived"]), max(4, min(5, int(row["storage_columns"])))
+                        name,
+                        {},
+                        bool(row["archived"]),
+                        max(1, min(9, int(row["storage_columns"]))),
+                        max(1, min(9, int(row["storage_layers"]))),
                     )
                 for row in connection.execute("SELECT * FROM unit_records ORDER BY code"):
                     freezer = loaded.get(row["freezer_id"])
@@ -561,6 +571,13 @@ class FreezerRepository:
             raw = json.loads(raw_text)
         except (OSError, json.JSONDecodeError) as exc:
             raise OSError(f"旧版 JSON 数据无法迁移：{exc}") from exc
+
+        def migrated_freezer(name: str, records: dict[str, UnitRecord]) -> FreezerData:
+            coordinates = [parse_unit_code(code) for code in records]
+            columns = max((item[0] for item in coordinates if item), default=4)
+            layers = max((item[1] for item in coordinates if item), default=5)
+            return FreezerData(name, records, storage_columns=max(4, columns), storage_layers=max(5, layers))
+
         loaded: dict[str, FreezerData] = {}
         raw_freezers = raw.get("freezers") if isinstance(raw, dict) else None
         if isinstance(raw_freezers, dict) and raw_freezers:
@@ -574,7 +591,7 @@ class FreezerRepository:
                     if parse_unit_code(code) and UnitRecord.from_dict(record).occupied
                 }
                 name = str(value.get("name", "")).strip() or f"液氮罐 {len(loaded) + 1}"
-                loaded[str(freezer_id)] = FreezerData(name[:50], records)
+                loaded[str(freezer_id)] = migrated_freezer(name[:50], records)
             requested = str(raw.get("current_freezer_id", ""))
         else:
             items = raw.get("units", raw) if isinstance(raw, dict) else {}
@@ -583,7 +600,7 @@ class FreezerRepository:
                 for code, record in (items.items() if isinstance(items, dict) else [])
                 if parse_unit_code(code) and UnitRecord.from_dict(record).occupied
             }
-            loaded = {"freezer-1": FreezerData("液氮罐 1", records)}
+            loaded = {"freezer-1": migrated_freezer("液氮罐 1", records)}
             requested = "freezer-1"
         if not loaded:
             loaded = {"freezer-1": FreezerData("液氮罐 1", {})}
@@ -608,8 +625,12 @@ class FreezerRepository:
         return self.current_freezer.storage_columns
 
     @property
+    def storage_layers(self) -> int:
+        return self.current_freezer.storage_layers
+
+    @property
     def storage_capacity(self) -> int:
-        return self.storage_columns * 5
+        return self.storage_columns * self.storage_layers
 
     @property
     def tube_used_count(self) -> int:
@@ -627,79 +648,86 @@ class FreezerRepository:
         """Total cryotube capacity using each box's actual layout (default 9×9)."""
         return sum(
             self.get_box_layout(code).rows * self.get_box_layout(code).columns
-            for code in all_unit_codes(self.storage_columns)
+            for code in all_unit_codes(self.storage_columns, self.storage_layers)
         )
 
     def is_storage_code(self, code: str, freezer_id: str | None = None) -> bool:
         parsed = parse_unit_code(code)
         target = self.freezers.get(freezer_id or self.current_freezer_id)
-        return bool(parsed and target and parsed[0] <= target.storage_columns)
+        return bool(
+            parsed
+            and target
+            and parsed[0] <= target.storage_columns
+            and parsed[1] <= target.storage_layers
+        )
 
-    def add_storage_column(self) -> None:
-        if self.current_freezer.storage_columns >= 5:
-            raise ValueError("当前液氮罐已经是 5 列。")
-        self.current_freezer.storage_columns = 5
-        self.save()
+    def box_inventory_count(self, code: str, freezer_id: str | None = None) -> int:
+        target_id = freezer_id or self.current_freezer_id
+        sample_count = sum(
+            stored_id == target_id and stored_code == code and sample.occupied
+            for (stored_id, stored_code, _position), sample in self.box_samples.items()
+        )
+        legacy_count = int(self.freezers[target_id].records.get(code, UnitRecord()).occupied)
+        return max(sample_count, legacy_count)
 
-    def fifth_column_occupied_codes(self) -> list[str]:
-        """Return fifth-column box codes that still contain any stored data."""
+    def storage_resize_conflicts(self, columns: int, layers: int) -> list[str]:
+        if not (1 <= columns <= 9 and 1 <= layers <= 9):
+            raise ValueError("液氮罐的列数和层数需要在 1 到 9 之间。")
         freezer_id = self.current_freezer_id
-        occupied: list[str] = []
-        for code in all_unit_codes(5)[-5:]:
-            has_legacy_record = self.current_freezer.records.get(code, UnitRecord()).occupied
-            has_box_samples = any(
-                stored_id == freezer_id
-                and stored_code == code
-                and sample.occupied
-                for (stored_id, stored_code, _position), sample in self.box_samples.items()
-            )
-            if has_legacy_record or has_box_samples:
-                occupied.append(code)
-        return occupied
+        occupied_codes = {
+            code for code, record in self.current_freezer.records.items() if record.occupied
+        }
+        occupied_codes.update(
+            code
+            for (stored_id, code, _position), sample in self.box_samples.items()
+            if stored_id == freezer_id and sample.occupied
+        )
+        return sorted(
+            (
+                code
+                for code in occupied_codes
+                if (parsed := parse_unit_code(code))
+                and (parsed[0] > columns or parsed[1] > layers)
+            ),
+            key=lambda code: tuple(int(char) for char in code),
+        )
 
-    def remove_storage_column(self) -> None:
-        """Safely remove the optional fifth column when all five boxes are empty."""
-        if self.current_freezer.storage_columns <= 4:
-            raise ValueError("当前液氮罐已经是默认的 4 列。")
-        occupied = self.fifth_column_occupied_codes()
-        if occupied:
+    def configure_storage(self, columns: int, layers: int) -> None:
+        """Atomically resize the current tank without discarding inventory."""
+        conflicts = self.storage_resize_conflicts(columns, layers)
+        if conflicts:
             raise ValueError(
-                f"第5列仍有细胞数据（盒位：{'、'.join(occupied)}），请先移动或清空后再去除。"
+                f"新规格范围外仍有库存（盒位：{'、'.join(conflicts)}），请先移动或清空。"
             )
+        if (columns, layers) == (self.storage_columns, self.storage_layers):
+            return
 
+        previous_freezers = copy.deepcopy(self.freezers)
+        previous_layouts = copy.deepcopy(self.box_layouts)
+        previous_samples = copy.deepcopy(self.box_samples)
         freezer_id = self.current_freezer_id
-        fifth_column_codes = set(all_unit_codes(5)[-5:])
-        previous_columns = self.current_freezer.storage_columns
-        previous_layouts = {
-            key: copy.deepcopy(layout)
-            for key, layout in self.box_layouts.items()
-            if key[0] == freezer_id and key[1] in fifth_column_codes
-        }
-        previous_samples = {
-            key: copy.deepcopy(sample)
-            for key, sample in self.box_samples.items()
-            if key[0] == freezer_id and key[1] in fifth_column_codes
-        }
-        previous_records = {
-            code: copy.deepcopy(record)
-            for code, record in self.current_freezer.records.items()
-            if code in fifth_column_codes
-        }
 
-        self.current_freezer.storage_columns = 4
-        for code in fifth_column_codes:
-            self.current_freezer.records.pop(code, None)
-            self.box_layouts.pop((freezer_id, code), None)
+        def outside(code: str) -> bool:
+            parsed = parse_unit_code(code)
+            return bool(parsed and (parsed[0] > columns or parsed[1] > layers))
+
+        self.current_freezer.storage_columns = columns
+        self.current_freezer.storage_layers = layers
+        for code in tuple(self.current_freezer.records):
+            if outside(code):
+                self.current_freezer.records.pop(code, None)
+        for key in tuple(self.box_layouts):
+            if key[0] == freezer_id and outside(key[1]):
+                self.box_layouts.pop(key, None)
         for key in tuple(self.box_samples):
-            if key[0] == freezer_id and key[1] in fifth_column_codes:
+            if key[0] == freezer_id and outside(key[1]):
                 self.box_samples.pop(key, None)
         try:
             self.save()
         except (OSError, ValueError):
-            self.current_freezer.storage_columns = previous_columns
-            self.current_freezer.records.update(previous_records)
-            self.box_layouts.update(previous_layouts)
-            self.box_samples.update(previous_samples)
+            self.freezers = previous_freezers
+            self.box_layouts = previous_layouts
+            self.box_samples = previous_samples
             raise
 
     @property
@@ -783,8 +811,15 @@ class FreezerRepository:
                 now = datetime.now().isoformat(timespec="seconds")
                 for freezer_id, freezer in self.freezers.items():
                     connection.execute(
-                        "INSERT INTO freezers(id,name,archived,storage_columns,created_at) VALUES(?,?,?,?,?)",
-                        (freezer_id, freezer.name, int(freezer.archived), freezer.storage_columns, now),
+                        "INSERT INTO freezers(id,name,archived,storage_columns,storage_layers,created_at) VALUES(?,?,?,?,?,?)",
+                        (
+                            freezer_id,
+                            freezer.name,
+                            int(freezer.archived),
+                            freezer.storage_columns,
+                            freezer.storage_layers,
+                            now,
+                        ),
                     )
                     for code, record in sorted(freezer.records.items()):
                         if not record.occupied or not parse_unit_code(code):
@@ -1094,6 +1129,7 @@ class FreezerRepository:
                     (key for key, freezer in self.freezers.items() if freezer.name.casefold() == name.casefold()),
                     None,
                 )
+                created_freezer = matching_id is None
                 if matching_id is None:
                     matching_id = f"freezer-{uuid.uuid4().hex[:10]}"
                     self.freezers[matching_id] = FreezerData(name, {})
@@ -1105,7 +1141,7 @@ class FreezerRepository:
                 tube_records = {
                     key: value
                     for key, value in incoming_records.items()
-                    if re.fullmatch(r"[1-5][1-5]/[A-Za-z]+[1-9][0-9]*", key)
+                    if re.fullmatch(r"[1-9][1-9]/[A-Za-z]+[1-9][0-9]*", key)
                 }
                 if overwrite:
                     target.records = {}
@@ -1150,8 +1186,20 @@ class FreezerRepository:
                     target.records.update(converted)
                     converted_count = len(converted)
                     storage_codes = set(converted)
-                if any(code.startswith("5") for code in storage_codes):
-                    target.storage_columns = 5
+                coordinates = [parse_unit_code(code) for code in storage_codes]
+                required_columns = max((item[0] for item in coordinates if item), default=1)
+                required_layers = max((item[1] for item in coordinates if item), default=1)
+                if not created_freezer and (
+                    required_columns > target.storage_columns
+                    or required_layers > target.storage_layers
+                ):
+                    raise ValueError(
+                        f"{name} 的导入位置超出当前规格 "
+                        f"{target.storage_columns}列×{target.storage_layers}层，请先调整液氮罐规格。"
+                    )
+                if created_freezer:
+                    target.storage_columns = max(4, required_columns)
+                    target.storage_layers = max(5, required_layers)
                 record_count += converted_count
             self.save()
         except (OSError, ValueError):
@@ -1251,7 +1299,7 @@ class FreezerRepository:
         results: list[dict[str, object]] = []
         for freezer_id in target_ids:
             freezer = self.freezers[freezer_id]
-            for code in all_unit_codes(freezer.storage_columns):
+            for code in all_unit_codes(freezer.storage_columns, freezer.storage_layers):
                 layout = self.get_box_layout(code, freezer_id)
                 occupied = set(self.get_box_samples(code, freezer_id))
                 empty = [
@@ -1790,7 +1838,7 @@ class FreezerRepository:
             return []
         needle = query.strip().casefold()
         results: list[dict[str, object]] = []
-        for code in all_unit_codes(self.storage_columns):
+        for code in all_unit_codes(self.storage_columns, self.storage_layers):
             if self.box_has_samples(code):
                 continue
             if needle and needle not in code.casefold() and needle not in f"细胞冻存盒 {code}".casefold():
@@ -1815,18 +1863,18 @@ class FreezerRepository:
         return removed
 
     def box_has_samples(self, code: str, freezer_id: str | None = None) -> bool:
-        target_id = freezer_id or self.current_freezer_id
-        return any(
-            stored_id == target_id and stored_code == code and sample.occupied
-            for (stored_id, stored_code, _position), sample in self.box_samples.items()
-        )
+        return self.box_inventory_count(code, freezer_id) > 0
 
     def box_position_is_empty(self, freezer_id: str, code: str) -> bool:
         freezer = self.freezers.get(freezer_id)
         if freezer is None or freezer.archived:
             return False
         parsed = parse_unit_code(code)
-        if not parsed or parsed[0] > freezer.storage_columns:
+        if (
+            not parsed
+            or parsed[0] > freezer.storage_columns
+            or parsed[1] > freezer.storage_layers
+        ):
             return False
         return (
             not freezer.records.get(code, UnitRecord()).occupied
@@ -1882,7 +1930,8 @@ class FreezerRepository:
             raise ValueError("请至少选择一条已占用记录。")
         if target_freezer_id not in self.freezers or self.freezers[target_freezer_id].archived:
             raise ValueError("目标液氮罐不存在或已归档。")
-        all_codes = all_unit_codes(self.freezers[target_freezer_id].storage_columns)
+        target_freezer = self.freezers[target_freezer_id]
+        all_codes = all_unit_codes(target_freezer.storage_columns, target_freezer.storage_layers)
         if start_code not in all_codes:
             raise ValueError("目标起始冻存盒位编码无效。")
         previous = copy.deepcopy(self.freezers)
@@ -1926,11 +1975,7 @@ class FreezerRepository:
 
     def compartment_usage(self, column: int, layer: int) -> int:
         code = unit_code(column, layer)
-        has_box_samples = any(
-            freezer_id == self.current_freezer_id and stored_code == code and sample.occupied
-            for (freezer_id, stored_code, _position), sample in self.box_samples.items()
-        )
-        return int(has_box_samples)
+        return int(self.box_has_samples(code))
 
     def layer_usage(self, layer: int) -> int:
         return sum(self.compartment_usage(column, layer) for column in range(1, self.storage_columns + 1))
@@ -1940,7 +1985,7 @@ class FreezerRepository:
         return sum(
             self.compartment_usage(column, layer)
             for column in range(1, self.storage_columns + 1)
-            for layer in range(1, 6)
+            for layer in range(1, self.storage_layers + 1)
         )
 
     def filter_records(
@@ -1958,7 +2003,11 @@ class FreezerRepository:
         person_needle = stored_by.strip().casefold()
         start = date_from.replace("-", "").strip()
         end = date_to.replace("-", "").strip()
-        codes = all_unit_codes(self.storage_columns) if status == "empty" else sorted(self.records)
+        codes = (
+            all_unit_codes(self.storage_columns, self.storage_layers)
+            if status == "empty"
+            else sorted(self.records)
+        )
         results: list[tuple[str, UnitRecord]] = []
         for code in codes:
             record = self.records.get(code, UnitRecord())

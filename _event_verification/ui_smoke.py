@@ -69,6 +69,34 @@ with TemporaryDirectory() as folder:
     startup_dialogs = [child for child in app.winfo_children() if isinstance(child, tk.Toplevel)]
     if startup_dialogs or app.grab_current() is not None:
         raise RuntimeError("cold startup unexpectedly opened a modal dialog")
+    app.show_overview()
+    app.update_idletasks()
+    overview_actions = {
+        child._text
+        for child in descendants(app.content)
+        if isinstance(child, RoundedButton)
+    }
+    if "调整规格" not in overview_actions or {"＋ 添加一列", "去除一列"} & overview_actions:
+        raise RuntimeError(f"tank specification actions are incorrect: {overview_actions}")
+    spec_dialog = manager.StorageSpecDialog(app, 4, 5)
+    spec_dialog.columns_var.set("7")
+    spec_dialog.layers_var.set("6")
+    spec_dialog._refresh_preview()
+    if "42个盒位" not in str(spec_dialog.preview_label.cget("text")):
+        raise RuntimeError("tank specification preview did not update its capacity")
+    spec_dialog._confirm()
+    app.update()
+    if spec_dialog.result != (7, 6):
+        raise RuntimeError(f"tank specification result is incorrect: {spec_dialog.result}")
+    repository.configure_storage(7, 6)
+    app.overview_batch_mode = True
+    app.show_overview()
+    app.update_idletasks()
+    if len(app.overview_compartment_buttons) != 42:
+        raise RuntimeError("7-column by 6-layer overview did not render all box positions")
+    app.overview_batch_mode = False
+    app.selected_compartments.clear()
+    repository.configure_storage(4, 5)
     app.show_box("11")
     app.update_idletasks()
     fit_buttons = [
