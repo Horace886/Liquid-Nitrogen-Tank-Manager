@@ -44,13 +44,13 @@ APP_SUPPORT_EMAIL = "1050136527@qq.com"
 DATA_FILE = Path(__file__).with_name("liquid_nitrogen_tank_storage_data.json")
 
 COLORS = {
-    "bg": "#F3F6FA",
+    "bg": "#F2F5FA",
     "panel": "#FFFFFF",
     "text": "#152338",
-    "muted": "#738095",
+    "muted": "#5E6F85",
     "line": "#E1E7EF",
-    "primary": "#3478F6",
-    "primary_dark": "#2365DD",
+    "primary": "#2864DC",
+    "primary_dark": "#1D4FB8",
     "primary_soft": "#EAF1FF",
     "empty": "#F8FAFC",
     "occupied": "#E8F6F0",
@@ -972,6 +972,7 @@ class RoundedButton(tk.Canvas):
         radius: int = 9,
         anchor: str = "center",
         text_padx: int = 14,
+        focus_outline: bool = True,
     ):
         self._font = tkfont.Font(font=font)
         if width is None:
@@ -1003,16 +1004,24 @@ class RoundedButton(tk.Canvas):
         self._radius = radius
         self._anchor = anchor
         self._text_padx = text_padx
+        self._focus_outline = focus_outline
         self._invoke_pending = False
+        self._hovered = False
+        self._animation_job: str | None = None
         self.bind("<Configure>", self._redraw)
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         self.bind("<ButtonRelease-1>", self._invoke)
         self.bind("<Return>", self._invoke)
         self.bind("<space>", self._invoke)
+        self.bind("<FocusIn>", self._redraw)
+        self.bind("<FocusOut>", self._redraw)
+        self.bind("<Destroy>", self._cancel_animation)
         self._redraw()
 
     def _rounded_rectangle(self, width: int, height: int) -> None:
+        focused = self._focus_outline and self.focus_get() is self
+        focus_color = "white" if self._foreground == "white" else COLORS["primary"]
         radius = max(3, min(self._radius, width // 2, height // 2))
         points = (
             radius,
@@ -1044,10 +1053,17 @@ class RoundedButton(tk.Canvas):
             points,
             smooth=True,
             splinesteps=24,
-            fill=self._fill,
-            outline=self._border,
-            width=1,
+            fill=self._surface_fill(),
+            outline=focus_color if focused else self._border,
+            width=2 if focused else 1,
+            tags="surface",
         )
+
+    def _surface_fill(self) -> str:
+        # Sidebar keyboard focus uses a background highlight, not an outline.
+        if not self._focus_outline and self.focus_get() is self:
+            return self._hover_fill
+        return self._fill
 
     def _redraw(self, _event: tk.Event | None = None) -> None:
         self.delete("all")
@@ -1069,12 +1085,43 @@ class RoundedButton(tk.Canvas):
         )
 
     def _on_enter(self, _event: tk.Event) -> None:
-        self._fill = self._hover_fill
-        self._redraw()
+        self._hovered = True
+        self._transition_fill(self._hover_fill)
 
     def _on_leave(self, _event: tk.Event) -> None:
-        self._fill = self._normal_fill
-        self._redraw()
+        self._hovered = False
+        self._transition_fill(self._normal_fill)
+
+    def _cancel_animation(self, _event: tk.Event | None = None) -> None:
+        if self._animation_job is not None:
+            self.after_cancel(self._animation_job)
+            self._animation_job = None
+
+    def _transition_fill(self, target: str) -> None:
+        """A short, interruptible hover fade; never delay an action or layout."""
+        self._cancel_animation()
+        if self._fill == target:
+            self._fill = target
+            self.itemconfigure("surface", fill=self._surface_fill())
+            return
+        start = self.winfo_rgb(self._fill)
+        end = self.winfo_rgb(target)
+
+        def step(frame: int = 1) -> None:
+            self._animation_job = None
+            if frame == 6:
+                self._fill = target
+            else:
+                progress = 1 - (1 - frame / 6) ** 3
+                self._fill = "#" + "".join(
+                    f"{round((a + (b - a) * progress) / 257):02x}"
+                    for a, b in zip(start, end)
+                )
+            self.itemconfigure("surface", fill=self._surface_fill())
+            if self._fill != target:
+                self._animation_job = self.after(16, lambda: step(frame + 1))
+
+        self._animation_job = self.after(16, step)
 
     def set_palette(
         self,
@@ -1084,8 +1131,9 @@ class RoundedButton(tk.Canvas):
         hover_fill: str,
         border: str,
     ) -> None:
+        self._cancel_animation()
         self._normal_fill = fill
-        self._fill = fill
+        self._fill = hover_fill if self._hovered else fill
         self._foreground = foreground
         self._hover_fill = hover_fill
         self._border = border
@@ -2812,6 +2860,8 @@ class FreezerManagerApp(tk.Tk):
         except tk.TclError:
             pass
         style.configure("Page.TFrame", background=COLORS["bg"])
+        style.configure("Sidebar.TFrame", background=COLORS["sidebar"])
+        style.configure("Capacity.Horizontal.TProgressbar", background="#77A8FF", troughcolor="#28415D", borderwidth=0, thickness=4, lightcolor="#77A8FF", darkcolor="#77A8FF")
         style.configure("Panel.TFrame", background=COLORS["panel"])
         style.configure("Title.TLabel", background=COLORS["bg"], foreground=COLORS["text"], font=("Microsoft YaHei UI", 20, "bold"))
         style.configure("Heading.TLabel", background=COLORS["panel"], foreground=COLORS["text"], font=("Microsoft YaHei UI", 13, "bold"))
@@ -2853,6 +2903,7 @@ class FreezerManagerApp(tk.Tk):
         style.map("Secondary.TButton", background=[("active", "#DEE7F1")])
         style.configure("Danger.TButton", font=("Microsoft YaHei UI", 10), foreground=COLORS["danger"], background="#FCEEEE", padding=(14, 9), borderwidth=0)
         style.configure("TEntry", padding=9, fieldbackground="white", bordercolor=COLORS["line"], lightcolor=COLORS["line"], darkcolor=COLORS["line"])
+        style.map("TEntry", bordercolor=[("focus", COLORS["primary"])], lightcolor=[("focus", COLORS["primary"])], darkcolor=[("focus", COLORS["primary"])])
         style.configure(
             "TCombobox",
             padding=(10, 8),
@@ -3077,15 +3128,20 @@ class FreezerManagerApp(tk.Tk):
 
         workbench_label = tk.Label(sidebar, text="工作台", fg=COLORS["sidebar_muted"], bg=COLORS["sidebar"], font=("Microsoft YaHei UI", 8), anchor="w")
         workbench_label.pack(fill="x", padx=25, pady=(0, 3))
+        self.sidebar_scroller = ScrollableFrame(sidebar, style="Sidebar.TFrame")
+        self.sidebar_scroller.canvas.configure(background=COLORS["sidebar"])
+        self.sidebar_scroller.body.configure(style="Sidebar.TFrame")
+        self.sidebar_scroller.pack(fill="both", expand=True)
+        navigation = self.sidebar_scroller.body
         self.nav_buttons = {
-            "overview": self._sidebar_button(sidebar, "▦   冻存盒总览", self.show_overview, active=True),
-            "search": self._sidebar_button(sidebar, "⌕   查找细胞", self.show_search_page),
-            "empty": self._sidebar_button(sidebar, "□   查找空位", self.show_empty_search_page),
-            "inventory": self._sidebar_button(sidebar, "▤   细胞库存", self.show_inventory_page),
-            "events": self._sidebar_button(sidebar, "↕   出入库登记", self.show_inventory_events_page),
-            "import": self._sidebar_button(sidebar, "⇧   从 Excel 导入", self.import_from_excel),
-            "export": self._sidebar_button(sidebar, "⇩   导出 Excel", self.export_to_excel),
-            "backup": self._sidebar_button(sidebar, "◷   备份与恢复", self.show_backup_page),
+            "overview": self._sidebar_button(navigation, "▦   冻存盒总览", self.show_overview, active=True),
+            "search": self._sidebar_button(navigation, "⌕   查找细胞", self.show_search_page),
+            "empty": self._sidebar_button(navigation, "□   查找空位", self.show_empty_search_page),
+            "inventory": self._sidebar_button(navigation, "▤   细胞库存", self.show_inventory_page),
+            "events": self._sidebar_button(navigation, "↕   出入库登记", self.show_inventory_events_page),
+            "import": self._sidebar_button(navigation, "⇧   从 Excel 导入", self.import_from_excel),
+            "export": self._sidebar_button(navigation, "⇩   导出 Excel", self.export_to_excel),
+            "backup": self._sidebar_button(navigation, "◷   备份与恢复", self.show_backup_page),
         }
 
         summary = tk.Frame(sidebar, bg="#0E1E31", height=96, highlightthickness=1, highlightbackground="#203A58")
@@ -3098,7 +3154,10 @@ class FreezerManagerApp(tk.Tk):
         self.sidebar_usage_label = tk.Label(summary, text="", bg="#0E1E31", fg="white", font=("Microsoft YaHei UI", 15, "bold"))
         self.sidebar_usage_label.pack(anchor="w", padx=14)
         self.sidebar_rate_label = tk.Label(summary, text="", bg="#0E1E31", fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8))
-        self.sidebar_rate_label.pack(anchor="w", padx=14, pady=(0, 9))
+        self.sidebar_rate_label.pack(anchor="w", padx=14)
+        self.sidebar_capacity_bar = ttk.Progressbar(summary, style="Capacity.Horizontal.TProgressbar", maximum=100)
+        self.sidebar_capacity_bar.pack(fill="x", padx=14, pady=(4, 0), ipady=0)
+        self.sidebar_capacity_bar.configure(length=100)
 
         main = tk.Frame(shell, bg=COLORS["bg"])
         main.pack(side="left", fill="both", expand=True)
@@ -3121,18 +3180,29 @@ class FreezerManagerApp(tk.Tk):
             text=text,
             command=lambda target=command: self._run_sidebar_command(target),
             anchor="w",
-            fill=COLORS["sidebar_hover"] if active else COLORS["sidebar"],
+            fill=COLORS["primary"] if active else COLORS["sidebar"],
             foreground="white" if active else "#C6D0DE",
-            hover_fill=COLORS["sidebar_hover"],
-            border=COLORS["sidebar_hover"] if active else COLORS["sidebar"],
+            hover_fill=COLORS["primary_dark"] if active else COLORS["sidebar_hover"],
+            border=COLORS["primary"] if active else COLORS["sidebar"],
             canvas_bg=COLORS["sidebar"],
             font=("Microsoft YaHei UI", 10, "bold" if active else "normal"),
             height=36,
             radius=11,
             text_padx=17,
+            focus_outline=False,
         )
         return_button.pack(fill="x", padx=12, pady=0)
+        return_button.bind("<FocusIn>", lambda _event: self._reveal_sidebar_button(return_button), add="+")
         return return_button
+
+    def _reveal_sidebar_button(self, button: RoundedButton) -> None:
+        canvas = self.sidebar_scroller.canvas
+        top = canvas.canvasy(0)
+        y = button.winfo_y()
+        bottom = y + button.winfo_height()
+        if y < top or bottom > top + canvas.winfo_height():
+            target = y if y < top else bottom - canvas.winfo_height()
+            canvas.yview_moveto(target / max(1, self.sidebar_scroller.body.winfo_height()))
 
     def _run_sidebar_command(self, command: Callable[[], None]) -> None:
         """Leave transient box modes before following a workbench link."""
@@ -3164,10 +3234,10 @@ class FreezerManagerApp(tk.Tk):
         for key, button in self.nav_buttons.items():
             active = key == active_key
             button.set_palette(
-                fill=COLORS["sidebar_hover"] if active else COLORS["sidebar"],
+                fill=COLORS["primary"] if active else COLORS["sidebar"],
                 foreground="white" if active else "#C6D0DE",
-                hover_fill=COLORS["sidebar_hover"],
-                border=COLORS["sidebar_hover"] if active else COLORS["sidebar"],
+                hover_fill=COLORS["primary_dark"] if active else COLORS["sidebar_hover"],
+                border=COLORS["primary"] if active else COLORS["sidebar"],
             )
 
     def _notify(self, title: str, message: str, *, danger: bool = False) -> None:
@@ -3239,6 +3309,7 @@ class FreezerManagerApp(tk.Tk):
         capacity = self.repository.tube_capacity
         self.sidebar_usage_label.configure(text=f"{used} / {capacity}")
         self.sidebar_rate_label.configure(text=f"当前使用率 {used / capacity * 100:.1f}%")
+        self.sidebar_capacity_bar.configure(value=used / capacity * 100)
 
     def _refresh_freezer_selector(self) -> None:
         self._freezer_ids = [freezer_id for freezer_id, _name in self.repository.list_freezers()]
@@ -4517,7 +4588,7 @@ class FreezerManagerApp(tk.Tk):
         stats = ttk.Frame(page, style="Page.TFrame")
         stats.grid(row=1 + row_offset, column=0, sticky="ew", pady=(0, 14))
         for index in range(4):
-            stats.columnconfigure(index, weight=1)
+            stats.columnconfigure(index, weight=1, uniform="summary")
         used_boxes = self.repository.used_count
         cards = [
             ("已用冻存管", str(tube_used), f"管 · {used_boxes}个盒", COLORS["primary"]),
@@ -4527,6 +4598,7 @@ class FreezerManagerApp(tk.Tk):
         ]
         for index, (label, value, suffix, accent) in enumerate(cards):
             card = self._panel(stats, row=0, column=index, sticky="ew", padx=(0 if index == 0 else 6, 0 if index == 3 else 6))
+            tk.Frame(card, bg=accent, height=3).pack(fill="x")
             inside = tk.Frame(card, bg=COLORS["panel"])
             inside.pack(fill="both", expand=True, padx=17, pady=12)
             label_row = tk.Frame(inside, bg=COLORS["panel"])
@@ -4535,8 +4607,8 @@ class FreezerManagerApp(tk.Tk):
             tk.Label(label_row, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9)).pack(side="left")
             value_row = tk.Frame(inside, bg=COLORS["panel"])
             value_row.pack(fill="x", pady=(3, 0))
-            tk.Label(value_row, text=value, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 19, "bold")).pack(side="left")
-            tk.Label(value_row, text=suffix, bg=COLORS["panel"], fg="#A0A9B7", font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(7, 0), pady=(7, 0))
+            tk.Label(value_row, text=value, bg=COLORS["panel"], fg=accent, font=("Microsoft YaHei UI", 21, "bold")).pack(anchor="w")
+            tk.Label(inside, text=suffix, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
 
         grid_panel = self._panel(page, row=2 + row_offset, column=0, sticky="nsew")
         grid_panel.rowconfigure(1, weight=1)
