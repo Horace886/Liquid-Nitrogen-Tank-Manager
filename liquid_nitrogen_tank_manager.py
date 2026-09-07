@@ -3652,7 +3652,7 @@ class FreezerManagerApp(tk.Tk):
                 highlightbackground=COLORS["primary"],
             )
             card.pack(fill="x", padx=18, pady=(13 if index == 0 else 0, 13))
-            rank = ui.Label(card, text=msg('推荐') if index == 0 else str(index + 1), width=6, bg=COLORS["occupied"] if index == 0 else "#F4F7FB", fg=COLORS["occupied_text"] if index == 0 else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=6, pady=8)
+            rank = ui.Label(card, text=msg('推荐') if index == 0 else str(index + 1), width=13, bg=COLORS["occupied"] if index == 0 else "#F4F7FB", fg=COLORS["occupied_text"] if index == 0 else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=6, pady=8)
             rank.pack(side="left", padx=(0, 14))
             detail = tk.Frame(card, bg=card_bg)
             detail.pack(side="left", fill="x", expand=True)

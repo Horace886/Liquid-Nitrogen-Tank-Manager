@@ -55,6 +55,11 @@ with TemporaryDirectory() as folder:
         settle(app)
         texts = [str(w.cget('text')) for w in descendants(app.content) if isinstance(w, (ui.Label, ui.TtkLabel))]
         print(page.__name__, 'labels=', len(texts), 'chinese=', [t for t in texts if any('\u4e00' <= c <= '\u9fff' for c in t)][:12])
+    app.show_empty_search_page(run_search=True)
+    settle(app)
+    recommendation = next(w for w in descendants(app.content)
+                          if isinstance(w, ui.Label) and str(w.cget('text')) == 'Recommended')
+    assert int(recommendation.cget('width')) >= len('Recommended')
     var = tk.StringVar(app, value='有细胞')
     choice = ui.Combobox(app, textvariable=var, values=(msg('有细胞'), msg('空盒')), state='readonly')
     choice.current(1)

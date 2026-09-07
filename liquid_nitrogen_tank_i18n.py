@@ -105,7 +105,10 @@ class LanguageState:
                 self.settings = value
         except (OSError, ValueError):
             pass
-        self.language = self.settings.get("language", "zh")
+        # Preferences written before the bilingual release did not represent
+        # an intentional user choice. Start those installations in Chinese
+        # once; subsequent selections carry the explicit marker below.
+        self.language = self.settings.get("language", "zh") if self.settings.get("language_selected") is True else "zh"
         if self.language not in {"zh", "en"}:
             self.language = "zh"
         self.widgets = weakref.WeakSet()
@@ -114,7 +117,7 @@ class LanguageState:
         if language not in {"zh", "en"}:
             raise ValueError("Unsupported language")
         if persist:
-            settings = {**self.settings, "language": language}
+            settings = {**self.settings, "language": language, "language_selected": True}
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = None
             try:

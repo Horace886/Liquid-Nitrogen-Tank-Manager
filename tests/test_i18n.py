@@ -45,9 +45,12 @@ class LanguageTests(unittest.TestCase):
             self.assertEqual(settings.language, 'zh')
             settings.set_language('en')
             self.assertEqual(LanguageState(path).language, 'en')
+            self.assertTrue(json.loads(path.read_text(encoding='utf-8'))['language_selected'])
             path.write_text('{broken', encoding='utf-8')
             self.assertEqual(LanguageState(path).language, 'zh')
             path.write_text('{"language":"unknown"}', encoding='utf-8')
+            self.assertEqual(LanguageState(path).language, 'zh')
+            path.write_text('{"language":"en"}', encoding='utf-8')
             self.assertEqual(LanguageState(path).language, 'zh')
             with self.assertRaises(ValueError):
                 settings.set_language('unknown')
