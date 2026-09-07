@@ -33,7 +33,7 @@ Excel 导出跟随当前界面语言：库存台账、出入库登记表的标�
 ## 运行环境
 
 - Windows
-- Python 3，建议使用 Python 3.11
+- Python 3，建议使用 Python 3.11；Python 3.13 已通过当前自动化测试及界面样式专项检查
 - Python 安装中需包含 Tkinter；从 [Python 官方网站](https://www.python.org/downloads/windows/) 安装的 Windows 版本通常默认包含
 
 项目当前只使用 Python 标准库，不需要运行 `pip install`。
@@ -219,7 +219,7 @@ Inventory and stock-activity exports remain separate. The formal register includ
 ## Requirements
 
 - Windows
-- Python 3; Python 3.11 is recommended
+- Python 3; Python 3.11 is recommended, and Python 3.13 has passed the current automated test suite and focused UI styling checks
 - Tkinter must be included in the Python installation; Windows installers from the [official Python website](https://www.python.org/downloads/windows/) normally include it
 
 The project currently uses only the Python standard library. No `pip install` step is required.
