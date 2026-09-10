@@ -968,6 +968,7 @@ class RoundedButton(tk.Canvas):
         foreground: str = "white",
         hover_fill: str | None = None,
         border: str | None = None,
+        border_width: int = 1,
         canvas_bg: str | None = None,
         font: tuple[str, int] | tuple[str, int, str] = ("Microsoft YaHei UI", 9, "bold"),
         width: int | None = None,
@@ -1005,6 +1006,7 @@ class RoundedButton(tk.Canvas):
         self._hover_fill = hover_fill or fill
         self._foreground = foreground
         self._border = border or fill
+        self._border_width = border_width
         self._radius = radius
         self._anchor = anchor
         self._text_padx = text_padx
@@ -1068,7 +1070,7 @@ class RoundedButton(tk.Canvas):
             splinesteps=24,
             fill=self._surface_fill(),
             outline=focus_color if focused else self._border,
-            width=2 if focused else 1,
+            width=2 if focused else self._border_width,
             tags="surface",
         )
 
@@ -1140,6 +1142,7 @@ class RoundedButton(tk.Canvas):
         foreground: str,
         hover_fill: str,
         border: str,
+        border_width: int = 1,
     ) -> None:
         self._cancel_animation()
         self._normal_fill = fill
@@ -1147,6 +1150,7 @@ class RoundedButton(tk.Canvas):
         self._foreground = foreground
         self._hover_fill = hover_fill
         self._border = border
+        self._border_width = border_width
         self._redraw()
 
     def set_text(self, text: str) -> None:
@@ -2768,6 +2772,7 @@ class FreezerManagerApp(tk.Tk):
         self.pending_import_preview: ImportPreview | None = None
         self.overview_batch_mode = False
         self.selected_compartments: set[str] = set()
+        self.overview_selection_anchor: str | None = None
         self.compartment_batch_mode = False
         self.selected_compartment_units: set[str] = set()
         self.current_box_code: str | None = None
@@ -2775,6 +2780,7 @@ class FreezerManagerApp(tk.Tk):
         self.box_batch_mode = False
         self.box_quick_move_mode = False
         self.selected_box_positions: set[str] = set()
+        self.box_selection_anchor: str | None = None
         self.box_drag_source: str | None = None
         self.box_drag_target: str | None = None
         self.box_move_undo: tuple[str, str, str, str, BoxSample] | None = None
@@ -3263,6 +3269,7 @@ class FreezerManagerApp(tk.Tk):
         self.box_batch_mode = False
         self.box_quick_move_mode = False
         self.selected_box_positions.clear()
+        self.box_selection_anchor = None
         self.box_empty_highlights.clear()
         self.pending_empty_recommendation = None
         self._clear_box_drag_state()
@@ -3372,6 +3379,7 @@ class FreezerManagerApp(tk.Tk):
         self.search_var.set("")
         self.overview_batch_mode = False
         self.selected_compartments.clear()
+        self.overview_selection_anchor = None
         self.compartment_batch_mode = False
         self.selected_compartment_units.clear()
         self.show_overview()
@@ -4611,8 +4619,11 @@ class FreezerManagerApp(tk.Tk):
         if self.overview_batch_mode:
             batch_panel = self._panel(page, row=1, column=0, sticky="ew", pady=(0, 14))
             selected_boxes = self._overview_selected_box_codes(occupied_only=True)
-            self.overview_batch_status_label = ui.Label(batch_panel, text=msg('已选 {0} 个盒位 · {1} 个有细胞冻存盒', len(self.selected_compartments), len(selected_boxes)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
-            self.overview_batch_status_label.pack(side="left", padx=18, pady=12)
+            batch_summary = tk.Frame(batch_panel, bg=COLORS["panel"])
+            batch_summary.pack(side="left", padx=18, pady=8)
+            self.overview_batch_status_label = ui.Label(batch_summary, text=msg('已选 {0} 个盒位 · {1} 个有细胞冻存盒', len(self.selected_compartments), len(selected_boxes)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
+            self.overview_batch_status_label.pack(anchor="w")
+            ui.Label(batch_summary, text=msg('提示：先点击起点，再按住 Shift 点击终点可连续选择'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
             RoundedButton(batch_panel, text=msg('清空选择'), command=self.clear_overview_batch_selection, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=90, height=34, radius=9).pack(side="right", padx=(0, 14), pady=8)
             RoundedButton(batch_panel, text=msg('导出选中'), command=self.overview_batch_export, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
             RoundedButton(batch_panel, text=msg('批量移动'), command=self.overview_batch_move, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", pady=8)
@@ -4704,6 +4715,7 @@ class FreezerManagerApp(tk.Tk):
             if action == "resolve":
                 self.overview_batch_mode = True
                 self.selected_compartments = set(conflicts)
+                self.overview_selection_anchor = None
                 self.show_overview()
             return
         try:
@@ -4714,6 +4726,7 @@ class FreezerManagerApp(tk.Tk):
         self.selected_compartments.intersection_update(
             sqlite_all_unit_codes(columns, layers)
         )
+        self.overview_selection_anchor = None
         self._update_sidebar_summary()
         self.show_overview()
 
@@ -4724,12 +4737,13 @@ class FreezerManagerApp(tk.Tk):
         selected = self.overview_batch_mode and code in self.selected_compartments
         button = RoundedButton(
             parent,
-            text=(msg('✓  {0}\n●  已有细胞', code) if selected else (msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code))),
+            text=msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code),
             command=(lambda value=code: self.toggle_compartment_selection(value)) if self.overview_batch_mode else (lambda: self.show_compartment(column, layer)),
-            fill=COLORS["primary"] if selected else (COLORS["occupied"] if occupied else COLORS["empty"]),
-            foreground="white" if selected else (COLORS["occupied_text"] if occupied else COLORS["text"]),
-            hover_fill=COLORS["primary_dark"] if selected else ("#D8F0E4" if occupied else COLORS["primary_soft"]),
+            fill=COLORS["occupied"] if occupied else COLORS["empty"],
+            foreground=COLORS["occupied_text"] if occupied else COLORS["text"],
+            hover_fill="#D8F0E4" if occupied else COLORS["primary_soft"],
             border=COLORS["primary"] if selected else ("#BFE4D2" if occupied else COLORS["line"]),
+            border_width=2 if selected else 1,
             canvas_bg=COLORS["panel"],
             font=("Microsoft YaHei UI", 9, "bold"),
             width=96 if self.repository.storage_columns > 5 else 118,
@@ -4738,15 +4752,30 @@ class FreezerManagerApp(tk.Tk):
         )
         if self.overview_batch_mode:
             self.overview_compartment_buttons[code] = button
+            button.bind(
+                "<ButtonPress-1>",
+                lambda _event, value=code: self._press_compartment_selection(value),
+            )
+            button.bind("<ButtonRelease-1>", lambda _event: "break")
+            button.bind(
+                "<Shift-ButtonPress-1>",
+                lambda _event, value=code: self._shift_select_compartments(value),
+            )
+            button.bind("<Shift-ButtonRelease-1>", lambda _event: "break")
         return button
 
     def toggle_overview_batch_mode(self) -> None:
+        previous_selection = tuple(self.selected_compartments)
         self.overview_batch_mode = not self.overview_batch_mode
+        self.overview_selection_anchor = None
         if not self.overview_batch_mode:
             self.selected_compartments.clear()
+            for code in previous_selection:
+                self._refresh_overview_compartment_button(code)
         self.show_overview()
 
     def toggle_compartment_selection(self, code: str) -> None:
+        self.overview_selection_anchor = code
         if code in self.selected_compartments:
             self.selected_compartments.remove(code)
         else:
@@ -4754,8 +4783,33 @@ class FreezerManagerApp(tk.Tk):
         self._refresh_overview_compartment_button(code)
         self._refresh_overview_batch_status()
 
+    def _press_compartment_selection(self, code: str) -> str:
+        self.toggle_compartment_selection(code)
+        return "break"
+
+    @staticmethod
+    def _contiguous_items(order: list[str], anchor: str | None, target: str) -> list[str]:
+        if anchor not in order or target not in order:
+            return [target]
+        start, end = sorted((order.index(anchor), order.index(target)))
+        return order[start:end + 1]
+
+    def _shift_select_compartments(self, code: str) -> str:
+        if not self.overview_batch_mode:
+            return "break"
+        order = list(getattr(self, "overview_compartment_buttons", {}))
+        if self.overview_selection_anchor not in order:
+            self.overview_selection_anchor = code
+        changed = self._contiguous_items(order, self.overview_selection_anchor, code)
+        self.selected_compartments.update(changed)
+        for selected_code in changed:
+            self._refresh_overview_compartment_button(selected_code)
+        self._refresh_overview_batch_status()
+        return "break"
+
     def clear_overview_batch_selection(self) -> None:
         self.selected_compartments.clear()
+        self.overview_selection_anchor = None
         for code in tuple(getattr(self, "overview_compartment_buttons", {})):
             self._refresh_overview_compartment_button(code)
         self._refresh_overview_batch_status()
@@ -4775,16 +4829,13 @@ class FreezerManagerApp(tk.Tk):
         used = self.repository.compartment_usage(column, layer)
         occupied = used > 0
         selected = code in self.selected_compartments
-        button.set_text(
-            msg('✓  {0}\n●  已有细胞', code)
-            if selected
-            else (msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code))
-        )
+        button.set_text(msg('{0}\n●  已有细胞', code) if occupied else msg('{0}\n○  空冻存盒', code))
         button.set_palette(
-            fill=COLORS["primary"] if selected else (COLORS["occupied"] if occupied else COLORS["empty"]),
-            foreground="white" if selected else (COLORS["occupied_text"] if occupied else COLORS["text"]),
-            hover_fill=COLORS["primary_dark"] if selected else ("#D8F0E4" if occupied else COLORS["primary_soft"]),
+            fill=COLORS["occupied"] if occupied else COLORS["empty"],
+            foreground=COLORS["occupied_text"] if occupied else COLORS["text"],
+            hover_fill="#D8F0E4" if occupied else COLORS["primary_soft"],
             border=COLORS["primary"] if selected else ("#BFE4D2" if occupied else COLORS["line"]),
+            border_width=2 if selected else 1,
         )
 
     def _overview_selected_unit_codes(self, *, occupied_only: bool) -> list[str]:
@@ -4819,6 +4870,7 @@ class FreezerManagerApp(tk.Tk):
             self._notify(msg('批量清空失败'), str(exc), danger=True)
             return
         self.selected_compartments.clear()
+        self.overview_selection_anchor = None
         self._update_sidebar_summary()
         self._notify(msg('批量清空完成'), msg('已清空 {0} 个冻存盒，共移除 {1} 支冻存管。', removed_boxes, removed_tubes))
         self.show_overview()
@@ -4839,6 +4891,7 @@ class FreezerManagerApp(tk.Tk):
             self._notify(msg('移动失败'), str(exc), danger=True)
             return
         self.selected_compartments.clear()
+        self.overview_selection_anchor = None
         self.overview_batch_mode = False
         self._update_sidebar_summary()
         summary = join_text('、', (msg('{0}→{1}', source, target) for source, target in mappings[:6]))
@@ -5139,12 +5192,14 @@ class FreezerManagerApp(tk.Tk):
             self.box_batch_mode = True
             self.box_quick_move_mode = False
             self.selected_box_positions = set(still_empty)
+            self.box_selection_anchor = None
             self.box_empty_highlights = set(still_empty)
             self.pending_empty_recommendation = None
         elif changed_box:
             self.box_batch_mode = False
             self.box_quick_move_mode = False
             self.selected_box_positions.clear()
+            self.box_selection_anchor = None
             self.box_empty_highlights.clear()
             self._clear_box_drag_state()
         self.current_box_code = code
@@ -5218,9 +5273,12 @@ class FreezerManagerApp(tk.Tk):
 
         toolbar = self._panel(page)
         toolbar.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 14))
-        self.box_batch_status_label = ui.Label(toolbar, text=self._box_status_text(code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
-        self.box_batch_status_label.pack(side="left", padx=18, pady=13)
+        toolbar_summary = tk.Frame(toolbar, bg=COLORS["panel"])
+        toolbar_summary.pack(side="left", padx=18, pady=8)
+        self.box_batch_status_label = ui.Label(toolbar_summary, text=self._box_status_text(code), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
+        self.box_batch_status_label.pack(anchor="w")
         if self.box_batch_mode:
+            ui.Label(toolbar_summary, text=msg('提示：先点击起点，再按住 Shift 点击终点可连续选择'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
             RoundedButton(toolbar, text=msg('全选'), command=lambda: self.select_all_box_positions(code), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(5, 14), pady=8)
             RoundedButton(toolbar, text=msg('清空选择'), command=lambda: self.clear_box_selection(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
             RoundedButton(toolbar, text=msg('清除'), command=lambda: self.batch_clear_box_positions(code), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=78, height=34, radius=9).pack(side="right", padx=5, pady=8)
@@ -5242,7 +5300,9 @@ class FreezerManagerApp(tk.Tk):
         legend.pack(side="bottom", fill="x", padx=22, pady=(2, 8))
         legend.pack_propagate(False)
         for label, color in ((msg('空孔'), "#EEF2F7"), (msg('已有细胞'), COLORS["occupied"]), (msg('查找命中'), "#FFD166"), (msg('可移动目标'), "#DCE8FF"), (msg('已选择'), COLORS["primary"])):
-            ui.Label(legend, text=msg('  {0}  ', label), bg=color, fg="white" if color == COLORS["primary"] else COLORS["text"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 8), pady=8)
+            selected_legend = color == COLORS["primary"]
+            legend_bg = COLORS["panel"] if selected_legend else color
+            ui.Label(legend, text=msg('  {0}  ', label), bg=legend_bg, fg=COLORS["primary"] if selected_legend else COLORS["text"], font=("Microsoft YaHei UI", 8), highlightthickness=2, highlightbackground=COLORS["primary"] if selected_legend else legend_bg).pack(side="left", padx=(0, 8), pady=8)
         self.box_move_undo_button = None
         if self.box_quick_move_mode:
             self.box_move_undo_button = RoundedButton(
@@ -5280,6 +5340,7 @@ class FreezerManagerApp(tk.Tk):
         grid.bind("<Configure>", self._sync_box_grid_scroll_region)
         grid_canvas.bind("<Configure>", self._sync_box_grid_viewport)
         self.box_position_buttons: dict[str, tk.Button] = {}
+        self.box_position_frames: dict[str, tk.Frame] = {}
         self.box_column_labels = []
         self.box_row_labels = []
         metrics = self._box_zoom_metrics(layout.columns)
@@ -5295,24 +5356,41 @@ class FreezerManagerApp(tk.Tk):
             self.box_row_labels.append(label)
             for column in range(1, layout.columns + 1):
                 position = self.repository.box_position(row, column)
+                cell = tk.Frame(grid, bg=COLORS["panel"], borderwidth=0)
+                cell._box_position = position  # type: ignore[attr-defined]
+                cell.grid(row=row, column=column, padx=3, pady=3, sticky="nsew")
                 button = ui.Button(
-                    grid,
+                    cell,
                     text=self._box_button_text(position, samples.get(position)),
                     command=lambda value=position: self.toggle_box_position(code, value) if self.box_batch_mode else self.edit_box_position(code, value),
                     relief="flat",
                     borderwidth=0,
+                    highlightthickness=0,
+                    takefocus=0,
                     cursor="hand2",
                     width=metrics["width"],
                     height=metrics["height"],
                     wraplength=metrics["wrap"],
                     font=("Microsoft YaHei UI", metrics["font"], "bold"),
                 )
-                button.grid(row=row, column=column, padx=3, pady=3, sticky="nsew")
+                button.pack(fill="both", expand=True, padx=2, pady=2)
                 self.box_position_buttons[position] = button
+                self.box_position_frames[position] = cell
                 button._box_position = position  # type: ignore[attr-defined]
                 button.bind("<ButtonPress-1>", lambda event, value=position: self._start_box_drag(event, code, value), add="+")
                 button.bind("<B1-Motion>", lambda event: self._update_box_drag(event, code), add="+")
                 button.bind("<ButtonRelease-1>", lambda event: self._finish_box_drag(event, code), add="+")
+                if self.box_batch_mode:
+                    button.bind(
+                        "<ButtonPress-1>",
+                        lambda _event, value=position: self._press_box_selection(code, value),
+                    )
+                    button.bind("<ButtonRelease-1>", lambda _event: "break")
+                button.bind(
+                    "<Shift-ButtonPress-1>",
+                    lambda _event, value=position: self._shift_select_box_positions(code, value),
+                )
+                button.bind("<Shift-ButtonRelease-1>", lambda _event: "break")
                 self._style_box_position(code, position)
 
         if opening_box_page:
@@ -5775,6 +5853,7 @@ class FreezerManagerApp(tk.Tk):
 
     def _style_box_position(self, code: str, position: str) -> None:
         button = getattr(self, "box_position_buttons", {}).get(position)
+        cell = getattr(self, "box_position_frames", {}).get(position)
         if button is None or not button.winfo_exists():
             return
         selected = self.box_batch_mode and position in self.selected_box_positions
@@ -5786,8 +5865,6 @@ class FreezerManagerApp(tk.Tk):
                 bg, fg, active = "#F8CACA", COLORS["danger"], "#F3B7B7"
             else:
                 bg, fg, active = "#B8D2FF", COLORS["primary_dark"], "#A8C6FA"
-        elif selected:
-            bg, fg, active = COLORS["primary"], "white", COLORS["primary_dark"]
         elif position in self.box_search_highlights and sample.occupied:
             bg, fg, active = "#FFD166", "#513500", "#F4BD3D"
         elif sample.occupied:
@@ -5796,6 +5873,8 @@ class FreezerManagerApp(tk.Tk):
             bg = "#EAF1FF" if self.box_quick_move_mode else "#EEF2F7"
             fg, active = COLORS["muted"], "#D6E4FC" if self.box_quick_move_mode else "#DEE7F1"
         cursor = "fleur" if self.box_quick_move_mode and sample.occupied else "hand2"
+        if cell is not None and cell.winfo_exists():
+            cell.configure(bg=COLORS["primary"] if selected else COLORS["panel"])
         button.configure(bg=bg, fg=fg, activebackground=active, activeforeground=fg, cursor=cursor, text=self._box_button_text(position, sample))
 
     def _refresh_box_page_state(self, code: str, positions: list[str] | tuple[str, ...] = ()) -> None:
@@ -5815,6 +5894,7 @@ class FreezerManagerApp(tk.Tk):
 
     def toggle_box_batch_mode(self, code: str) -> None:
         self.box_batch_mode = not self.box_batch_mode
+        self.box_selection_anchor = None
         self.box_quick_move_mode = False
         self._clear_box_drag_state(code)
         if not self.box_batch_mode:
@@ -5822,6 +5902,7 @@ class FreezerManagerApp(tk.Tk):
         self.show_box(code)
 
     def toggle_box_position(self, code: str, position: str) -> None:
+        self.box_selection_anchor = position
         if position in self.selected_box_positions:
             self.selected_box_positions.remove(position)
         else:
@@ -5830,9 +5911,28 @@ class FreezerManagerApp(tk.Tk):
         if self.box_batch_status_label.winfo_exists():
             self.box_batch_status_label.configure(text=self._box_status_text(code))
 
+    def _press_box_selection(self, code: str, position: str) -> str:
+        self.toggle_box_position(code, position)
+        return "break"
+
+    def _shift_select_box_positions(self, code: str, position: str) -> str:
+        if not self.box_batch_mode or self.current_box_code != code:
+            return "break"
+        order = list(getattr(self, "box_position_buttons", {}))
+        if self.box_selection_anchor not in order:
+            self.box_selection_anchor = position
+        changed = self._contiguous_items(order, self.box_selection_anchor, position)
+        self.selected_box_positions.update(changed)
+        for selected_position in changed:
+            self._style_box_position(code, selected_position)
+        if self.box_batch_status_label.winfo_exists():
+            self.box_batch_status_label.configure(text=self._box_status_text(code))
+        return "break"
+
     def select_all_box_positions(self, code: str) -> None:
         layout = self.repository.get_box_layout(code)
         self.selected_box_positions = {self.repository.box_position(row, column) for row in range(1, layout.rows + 1) for column in range(1, layout.columns + 1)}
+        self.box_selection_anchor = None
         for position in self.selected_box_positions:
             self._style_box_position(code, position)
         self.box_batch_status_label.configure(text=self._box_status_text(code))
@@ -5840,6 +5940,7 @@ class FreezerManagerApp(tk.Tk):
     def clear_box_selection(self, code: str) -> None:
         previous = tuple(self.selected_box_positions)
         self.selected_box_positions.clear()
+        self.box_selection_anchor = None
         for position in previous:
             self._style_box_position(code, position)
         self.box_batch_status_label.configure(text=self._box_status_text(code))
@@ -5957,6 +6058,7 @@ class FreezerManagerApp(tk.Tk):
             return
         changed_positions = tuple(positions)
         self.selected_box_positions.clear()
+        self.box_selection_anchor = None
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
         self._notify(msg('批量入库完成'), msg('已入库 {0} 支冻存管，并写入出入库登记。', count))
@@ -5997,6 +6099,7 @@ class FreezerManagerApp(tk.Tk):
             return
         changed_positions = tuple(positions)
         self.selected_box_positions.clear()
+        self.box_selection_anchor = None
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
         self._notify(msg('批量出库完成'), msg('已出库 {0} 支冻存管，并写入出入库登记。', count))
@@ -6017,6 +6120,7 @@ class FreezerManagerApp(tk.Tk):
             return
         changed_positions = tuple(occupied)
         self.selected_box_positions.clear()
+        self.box_selection_anchor = None
         self._refresh_box_page_state(code, changed_positions)
         self._update_sidebar_summary()
         self._notify(msg('清除完成'), msg('已清除 {0} 个盒内细胞记录，并写入出入库登记。', count))

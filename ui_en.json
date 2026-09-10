@@ -620,5 +620,6 @@
   "高级查找 · {0}": "Advanced Search · {0}",
   "高级检索冻存盒批量移动前": "高级检索冻存盒批量移动前",
   "高级检索批量清空前": "高级检索批量清空前",
-  "默认：不足≤{0}管 / 提醒≤{1}管": "Default: Low ≤{0} / Warning ≤{1} tubes"
+  "默认：不足≤{0}管 / 提醒≤{1}管": "Default: Low ≤{0} / Warning ≤{1} tubes",
+  "提示：先点击起点，再按住 Shift 点击终点可连续选择": "Tip: click a start, then Shift-click an end to select a range"
 }

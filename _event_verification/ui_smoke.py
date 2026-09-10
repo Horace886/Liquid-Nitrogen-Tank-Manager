@@ -94,8 +94,38 @@ with TemporaryDirectory() as folder:
     app.update_idletasks()
     if len(app.overview_compartment_buttons) != 42:
         raise RuntimeError("7-column by 6-layer overview did not render all box positions")
-    app.overview_batch_mode = False
-    app.selected_compartments.clear()
+    overview_shift_hints = [
+        child for child in descendants(app.content)
+        if isinstance(child, tk.Label) and "Shift" in str(child.cget("text"))
+    ]
+    if len(overview_shift_hints) != 1:
+        raise RuntimeError("overview batch mode is missing its Shift range hint")
+    app.toggle_compartment_selection("11")
+    app.overview_compartment_buttons["31"].event_generate("<Shift-ButtonPress-1>", x=4, y=4)
+    app.overview_compartment_buttons["31"].event_generate("<Shift-ButtonRelease-1>", x=4, y=4)
+    app.update()
+    if app.selected_compartments != {"11", "21", "31"}:
+        raise RuntimeError(f"overview Shift range selection failed: {app.selected_compartments}")
+    if (
+        app.overview_compartment_buttons["11"]._normal_fill != manager.COLORS["occupied"]
+        or app.overview_compartment_buttons["11"]._border != manager.COLORS["primary"]
+        or app.overview_compartment_buttons["11"]._border_width != 2
+        or "✓" in app.overview_compartment_buttons["11"]._text
+    ):
+        raise RuntimeError("overview selection does not preserve the occupied style with a blue outline")
+    if app.overview_compartment_buttons["21"]._normal_fill != manager.COLORS["empty"]:
+        raise RuntimeError("overview selection does not preserve the empty-slot style")
+    app.overview_compartment_buttons["21"].event_generate("<ButtonPress-1>", x=4, y=4)
+    if "21" in app.selected_compartments:
+        raise RuntimeError("overview selection did not cancel immediately on mouse press")
+    app.overview_compartment_buttons["21"].event_generate("<ButtonRelease-1>", x=4, y=4)
+    app.update()
+    if "21" in app.selected_compartments:
+        raise RuntimeError("overview mouse release toggled an immediately cancelled selection again")
+    old_selected_button = app.overview_compartment_buttons["11"]
+    app.toggle_overview_batch_mode()
+    if app.overview_batch_mode or old_selected_button._border == manager.COLORS["primary"]:
+        raise RuntimeError("leaving overview batch mode did not clear the visible selection immediately")
     repository.configure_storage(4, 5)
     app.show_box("11")
     app.update_idletasks()
@@ -137,6 +167,44 @@ with TemporaryDirectory() as folder:
     app.update_idletasks()
     if app.box_move_undo_button is not None:
         raise RuntimeError("quick-move undo action remained visible after quick move was disabled")
+    app.toggle_box_batch_mode("11")
+    app.update_idletasks()
+    box_shift_hints = [
+        child for child in descendants(app.content)
+        if isinstance(child, tk.Label) and "Shift" in str(child.cget("text"))
+    ]
+    if len(box_shift_hints) != 1:
+        raise RuntimeError("cryobox batch mode is missing its Shift range hint")
+    app.toggle_box_position("11", "A2")
+    app.box_position_buttons["B2"].event_generate("<Shift-ButtonPress-1>", x=4, y=4)
+    app.box_position_buttons["B2"].event_generate("<Shift-ButtonRelease-1>", x=4, y=4)
+    app.update()
+    expected_range = {f"A{column}" for column in range(2, 10)} | {"B1", "B2"}
+    if app.selected_box_positions != expected_range:
+        raise RuntimeError(f"cryobox Shift range selection failed: {app.selected_box_positions}")
+    if (
+        str(app.box_position_buttons["A2"].cget("bg")) != "#EEF2F7"
+        or str(app.box_position_frames["A2"].cget("bg")) != manager.COLORS["primary"]
+        or str(app.box_position_buttons["B1"].cget("bg")) != manager.COLORS["occupied"]
+        or str(app.box_position_frames["B1"].cget("bg")) != manager.COLORS["primary"]
+    ):
+        raise RuntimeError("cryobox selection does not preserve cell state colors with a blue outline")
+    if any(str(button.cget("takefocus")) != "0" for button in app.box_position_buttons.values()):
+        raise RuntimeError("cryobox cells can still display keyboard focus rectangles")
+    app.box_position_buttons["A2"].event_generate("<ButtonPress-1>", x=4, y=4)
+    if "A2" in app.selected_box_positions or str(app.box_position_frames["A2"].cget("bg")) == manager.COLORS["primary"]:
+        raise RuntimeError("cryobox selection did not cancel and redraw immediately on mouse press")
+    if app.focus_get() is app.box_position_buttons["A2"]:
+        raise RuntimeError("mouse selection left a dotted focus rectangle on a cryobox cell")
+    app.box_position_buttons["A2"].event_generate("<ButtonRelease-1>", x=4, y=4)
+    legend_labels = [
+        child for child in descendants(app.box_legend_widget)
+        if isinstance(child, tk.Label) and str(child.cget("text")).strip() in {"空孔", "已有细胞", "查找命中", "可移动目标", "已选择"}
+    ]
+    if len(legend_labels) != 5 or len({label.winfo_reqheight() for label in legend_labels}) != 1:
+        raise RuntimeError("cryobox legend items do not have a consistent height")
+    app.toggle_box_batch_mode("11")
+    app.update_idletasks()
     app.box_batch_mode = True
     app.box_quick_move_mode = True
     app.selected_box_positions = {"A1"}
