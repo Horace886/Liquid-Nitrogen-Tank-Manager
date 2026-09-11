@@ -1301,7 +1301,7 @@ class BoxLayoutDialog(ui.Toplevel):
 
     def __init__(self, parent: tk.Misc, rows: int, columns: int):
         super().__init__(parent)
-        self.result: tuple[int, int] | None = None
+        self.result: tuple[int, int, str] | None = None
         self.title(msg('设置盒子布局'))
         self.configure(bg=COLORS["panel"])
         self.resizable(False, False)
@@ -1324,6 +1324,7 @@ class BoxLayoutDialog(ui.Toplevel):
         values = tuple(str(value) for value in range(1, 21))
         self.rows_var = tk.StringVar(value=str(rows))
         self.columns_var = tk.StringVar(value=str(columns))
+        self.scope_var = tk.StringVar(value="current")
 
         row_box = tk.Frame(picker, bg=COLORS["panel"])
         row_box.grid(row=0, column=0, sticky="ew")
@@ -1339,15 +1340,37 @@ class BoxLayoutDialog(ui.Toplevel):
         self.columns_picker = ui.Combobox(column_box, textvariable=self.columns_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
         self.columns_picker.pack(fill="x")
 
+        scope = tk.Frame(body, bg=COLORS["panel"])
+        scope.pack(fill="x", pady=(18, 0))
+        ui.Label(scope, text=msg('应用范围'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
+        for value, label in (
+            ("current", msg('仅当前冻存盒')),
+            ("all", msg('当前液氮罐的全部冻存盒')),
+        ):
+            tk.Radiobutton(
+                scope,
+                text=ui.display(self, label),
+                variable=self.scope_var,
+                value=value,
+                bg=COLORS["panel"],
+                fg=COLORS["text"],
+                activebackground=COLORS["panel"],
+                activeforeground=COLORS["text"],
+                selectcolor=COLORS["panel"],
+                font=("Microsoft YaHei UI", 9),
+                anchor="w",
+                highlightthickness=0,
+            ).pack(fill="x", anchor="w")
+
         self.actions = tk.Frame(body, bg=COLORS["panel"])
         self.actions.pack(fill="x", pady=(22, 0))
-        RoundedButton(self.actions, text=msg('确定'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right")
-        RoundedButton(self.actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=92, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(self.actions, text=msg('确定'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=112, height=42, radius=10).pack(side="right")
+        RoundedButton(self.actions, text=msg('取消'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=112, height=42, radius=10).pack(side="right", padx=9)
 
         self.bind("<Return>", lambda _event: self._confirm())
         self.bind("<Escape>", lambda _event: self._cancel())
         self.update_idletasks()
-        width, height = 450, 258
+        width, height = 470, max(380, self.winfo_reqheight())
         left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
         top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
         self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
@@ -1362,7 +1385,7 @@ class BoxLayoutDialog(ui.Toplevel):
             pass
 
     def _confirm(self) -> None:
-        self.result = (int(self.rows_var.get()), int(self.columns_var.get()))
+        self.result = (int(self.rows_var.get()), int(self.columns_var.get()), self.scope_var.get())
         self._close_without_ghost()
 
     def _cancel(self) -> None:
@@ -1381,7 +1404,7 @@ class BoxLayoutDialog(ui.Toplevel):
         except tk.TclError:
             pass
 
-    def show(self) -> tuple[int, int] | None:
+    def show(self) -> tuple[int, int, str] | None:
         self.wait_window()
         return self.result
 
@@ -4459,6 +4482,7 @@ class FreezerManagerApp(tk.Tk):
             highlightbackground=COLORS["primary"] if opened else COLORS["line"],
         )
         card.pack(fill="x", padx=18, pady=7)
+        RoundedButton(card, text=msg('再次打开') if opened else msg('打开盒子'), command=lambda values=tuple(str(position) for position in positions): self.open_inventory_location(freezer_id, code, values, return_mode="basic"), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=92, height=34, radius=9, font=("Microsoft YaHei UI", 8)).pack(side="right", padx=16, pady=16)
         detail = tk.Frame(card, bg=card_bg)
         detail.pack(side="left", fill="x", expand=True, padx=16, pady=12)
         title_row = tk.Frame(detail, bg=card_bg)
@@ -4476,9 +4500,17 @@ class FreezerManagerApp(tk.Tk):
                 highlightthickness=1,
                 highlightbackground="#BFD4FF",
             ).pack(side="left", padx=10)
-        ui.Label(detail, text=msg('匹配孔位 {0}  ·  {1} 支冻存管', compact_box_positions(positions), len(positions)), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
-        ui.Label(detail, text=msg('{0}  ·  细胞：{1}', freezer_name, name_preview), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(3, 0))
-        RoundedButton(card, text=msg('再次打开') if opened else msg('打开盒子'), command=lambda values=tuple(str(position) for position in positions): self.open_inventory_location(freezer_id, code, values, return_mode="basic"), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=92, height=34, radius=9, font=("Microsoft YaHei UI", 8)).pack(side="right", padx=16, pady=16)
+        match_label = ui.Label(detail, text=msg('匹配孔位 {0}  ·  {1} 支冻存管', compact_box_positions(positions), len(positions)), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w", justify="left", wraplength=400)
+        match_label.pack(fill="x", pady=(4, 0))
+        names_label = ui.Label(detail, text=msg('{0}  ·  细胞：{1}', freezer_name, name_preview), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 8), anchor="w", justify="left", wraplength=400)
+        names_label.pack(fill="x", pady=(3, 0))
+
+        def resize_details(event: tk.Event) -> None:
+            wraplength = max(160, event.width - 4)
+            match_label.configure(wraplength=wraplength)
+            names_label.configure(wraplength=wraplength)
+
+        detail.bind("<Configure>", resize_details, add="+")
 
     def run_advanced_search(self) -> None:
         self.show_advanced_search_page(run_search=True)
@@ -5374,7 +5406,7 @@ class FreezerManagerApp(tk.Tk):
                 font=("Microsoft YaHei UI", 9, "bold"),
             ).pack(anchor="w", pady=(3, 0))
         RoundedButton(nav, text=msg('退出批量') if self.box_batch_mode else msg('批量选择'), command=lambda: self.toggle_box_batch_mode(code), fill="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], foreground=COLORS["text"] if self.box_batch_mode else COLORS["primary"], hover_fill="#DCE4EE" if self.box_batch_mode else "#DCE8FF", border="#E8EDF4" if self.box_batch_mode else COLORS["primary_soft"], canvas_bg=COLORS["bg"], width=105, height=38, radius=10).pack(side="right")
-        RoundedButton(nav, text=msg('设置布局'), command=lambda: self.configure_box_dialog(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10).pack(side="right", padx=9)
+        RoundedButton(nav, text=msg('设置布局'), command=lambda: self.configure_box_dialog(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["bg"], width=100, height=38, radius=10, focus_outline=False).pack(side="right", padx=9)
         if not self.box_batch_mode:
             RoundedButton(
                 nav,
@@ -6069,9 +6101,12 @@ class FreezerManagerApp(tk.Tk):
         selected_layout = BoxLayoutDialog(self, layout.rows, layout.columns).show()
         if selected_layout is None:
             return
-        rows, columns = selected_layout
+        rows, columns, scope = selected_layout
         try:
-            self.repository.configure_box(code, rows, columns, msg('细胞冻存盒 {0}', code))
+            if scope == "all":
+                self.repository.configure_all_boxes(rows, columns)
+            else:
+                self.repository.configure_box(code, rows, columns, msg('细胞冻存盒 {0}', code))
         except (OSError, ValueError) as exc:
             self._notify(msg('布局保存失败'), str(exc), danger=True)
             return

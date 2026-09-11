@@ -1276,6 +1276,33 @@ class FreezerRepository:
         self.box_layouts[(self.current_freezer_id, code)] = BoxLayout(rows, columns, f"细胞冻存盒 {code}")
         self.save()
 
+    def configure_all_boxes(self, rows: int, columns: int) -> None:
+        """Atomically apply one layout to every box position in the current tank."""
+        if not (1 <= rows <= 20 and 1 <= columns <= 20):
+            raise ValueError("盒子布局的行数和列数需要在 1 到 20 之间。")
+        freezer_id = self.current_freezer_id
+        outside = []
+        for (stored_id, unit_code, position), sample in self.box_samples.items():
+            if stored_id != freezer_id or not sample.occupied:
+                continue
+            row, column = self.parse_box_position(position)
+            if row > rows or column > columns:
+                outside.append((unit_code, position))
+        if outside:
+            unit_code, position = outside[0]
+            raise ValueError(
+                f"当前液氮罐有 {len(outside)} 个样品超出新布局（如冻存盒 {unit_code}/{position}），请先移动或清空。"
+            )
+
+        previous_layouts = copy.deepcopy(self.box_layouts)
+        for code in all_unit_codes(self.storage_columns, self.storage_layers):
+            self.box_layouts[(freezer_id, code)] = BoxLayout(rows, columns, f"细胞冻存盒 {code}")
+        try:
+            self.save()
+        except (OSError, ValueError):
+            self.box_layouts = previous_layouts
+            raise
+
     def get_box_samples(self, code: str, freezer_id: str | None = None) -> dict[str, BoxSample]:
         target_id = freezer_id or self.current_freezer_id
         return {

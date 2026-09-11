@@ -88,6 +88,37 @@ with TemporaryDirectory() as folder:
     app.update()
     if spec_dialog.result != (7, 20):
         raise RuntimeError(f"tank specification result is incorrect: {spec_dialog.result}")
+    layout_dialog = manager.BoxLayoutDialog(app, 9, 9)
+    app.deiconify()
+    layout_dialog.deiconify()
+    app.update()
+    layout_dialog_buttons = [
+        child for child in descendants(layout_dialog) if isinstance(child, RoundedButton)
+    ]
+    if len(layout_dialog_buttons) != 2 or any(
+        button.winfo_reqwidth() < 112 or button.winfo_reqheight() < 42
+        for button in layout_dialog_buttons
+    ):
+        raise RuntimeError("cryobox layout dialog actions are undersized")
+    if layout_dialog.actions.winfo_height() < 42:
+        raise RuntimeError(
+            "cryobox layout dialog clips the action buttons: "
+            f"actions={layout_dialog.actions.winfo_height()}, "
+            f"dialog={layout_dialog.winfo_height()}, requested={layout_dialog.winfo_reqheight()}"
+        )
+    scope_options = {
+        str(child.cget("text"))
+        for child in descendants(layout_dialog)
+        if isinstance(child, tk.Radiobutton)
+    }
+    if layout_dialog.scope_var.get() != "current" or scope_options != {"仅当前冻存盒", "当前液氮罐的全部冻存盒"}:
+        raise RuntimeError(f"cryobox layout scope options are incorrect: {scope_options}")
+    layout_dialog.scope_var.set("all")
+    layout_dialog._confirm()
+    app.update()
+    app.withdraw()
+    if layout_dialog.result != (9, 9, "all"):
+        raise RuntimeError(f"cryobox layout scope result is incorrect: {layout_dialog.result}")
     repository.configure_storage(9, 20)
     app.overview_batch_mode = True
     app.show_overview()
@@ -153,6 +184,12 @@ with TemporaryDirectory() as folder:
         raise RuntimeError("box zoom controls still display a focus outline")
     if any(str(button.cget("takefocus")) != "1" for button in zoom_buttons):
         raise RuntimeError("box zoom controls lost keyboard accessibility")
+    layout_buttons = [
+        child for child in descendants(app.content)
+        if isinstance(child, RoundedButton) and child._text == "设置布局"
+    ]
+    if len(layout_buttons) != 1 or layout_buttons[0]._focus_outline:
+        raise RuntimeError("cryobox layout action still displays a focus outline")
     if app.bind_all("<Control-MouseWheel>"):
         raise RuntimeError("Ctrl + mouse-wheel box zoom binding is still active")
     ctrl_zoom_hints = [
@@ -430,6 +467,34 @@ with TemporaryDirectory() as folder:
         raise RuntimeError(
             f"opened search result is not visibly marked: labels={len(visited_labels)}, buttons={len(revisit_buttons)}"
         )
+
+    search_card_host = tk.Frame(app.content, width=620, height=180)
+    search_card_host.pack(fill="x")
+    search_card_host.pack_propagate(False)
+    long_positions = [f"{row}{column}" for row in "ABCDEFGHI" for column in (1, 3, 5, 7, 9)]
+    app._render_box_search_group(
+        search_card_host,
+        {
+            "freezer_id": first_freezer_id,
+            "freezer_name": "液氮罐 1",
+            "code": "99",
+            "positions": long_positions,
+            "samples": [BoxSample(sample_name=f"Sample {index}") for index in range(len(long_positions))],
+        },
+    )
+    app.update_idletasks()
+    card = search_card_host.winfo_children()[0]
+    open_button = next(child for child in descendants(card) if isinstance(child, RoundedButton))
+    match_label = next(
+        child
+        for child in descendants(card)
+        if isinstance(child, tk.Label) and str(child.cget("text")).startswith("匹配孔位")
+    )
+    if open_button.winfo_x() + open_button.winfo_width() > card.winfo_width():
+        raise RuntimeError("long search details pushed the open-box button outside the result card")
+    if match_label.winfo_reqheight() <= 24:
+        raise RuntimeError("long search details did not wrap onto multiple lines")
+    search_card_host.destroy()
 
     app.empty_required_var.set("3")
     app.empty_scope_var.set("全部液氮罐")

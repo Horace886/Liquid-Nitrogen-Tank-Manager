@@ -229,6 +229,31 @@ class ExcelIoTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 repository.configure_storage(6, 21)
 
+    def test_tank_wide_box_layout_is_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository = FreezerRepository(root / "storage.db", root / "missing.json")
+            repository.configure_storage(2, 2)
+            repository.configure_box("11", 8, 8)
+            repository.configure_box("22", 10, 10)
+            repository.set_box_sample(
+                "22",
+                "J10",
+                BoxSample(sample_name="A549", stored_date="2026-09-11", stored_by="Horace"),
+            )
+
+            with self.assertRaisesRegex(ValueError, "22/J10"):
+                repository.configure_all_boxes(9, 9)
+            self.assertEqual((repository.get_box_layout("11").rows, repository.get_box_layout("11").columns), (8, 8))
+            self.assertEqual((repository.get_box_layout("22").rows, repository.get_box_layout("22").columns), (10, 10))
+
+            repository.configure_all_boxes(10, 12)
+            for code in all_unit_codes(2, 2):
+                layout = repository.get_box_layout(code)
+                self.assertEqual((layout.rows, layout.columns), (10, 12))
+            reloaded = FreezerRepository(root / "storage.db", root / "missing.json")
+            self.assertEqual((reloaded.get_box_layout("12").rows, reloaded.get_box_layout("12").columns), (10, 12))
+
     def test_twenty_layer_codes_move_and_shrink_safely(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

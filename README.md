@@ -123,6 +123,7 @@ Excel 兜底迁入不能完整保留：
 - 盒位编号由“列 + 层”直接拼接，例如 `41` 表示第 4 列、第 1 层，`410` 表示第 4 列、第 10 层。
 - 扩大规格可直接保存；缩小规格前必须先移动或清空新范围以外的库存，程序不会自动搬移或删除冻存管。
 - 每个盒位对应一个冻存盒；冻存盒默认布局为 9×9，可在 1×1 到 20×20 之间调整。
+- 设置冻存盒布局时，可以只修改当前冻存盒，也可以将同一规格一次性应用到当前液氮罐的全部冻存盒；批量缩小时，只要任一盒内存在超出新布局的细胞，全部修改都会取消。
 - 每个盒内孔位按 1 支冻存管统计。
 - 孔位区域支持缩放、适应窗口和横向或纵向滚动。
 
@@ -133,12 +134,13 @@ Excel 兜底迁入不能完整保留：
 - 总览统计卡片将数量和说明分行显示，避免小窗口下挤在一行。
 - 圆角按钮提供约 100 毫秒的悬停颜色过渡，支持快速移入、移出；切页和执行操作不会等待动画。
 - 侧栏按钮仅使用背景高亮，不显示额外焦点框；其他按钮键盘聚焦时显示高对比边框，输入框聚焦时显示蓝色边框。
-- 冻存盒的放大、缩小和适应窗口按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
+- 冻存盒的放大、缩小、适应窗口和设置布局按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
 - 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
+- “设置盒子布局”窗口使用等宽的大尺寸取消和确定按钮，便于点击。
 
 ## 搜索和批量操作
 
-普通“查找细胞”会搜索全部未归档液氮罐，并显示液氮罐、冻存盒和孔位。打开其他液氮罐中的结果时，程序会自动切换并高亮对应孔位。
+普通“查找细胞”会搜索全部未归档液氮罐，并显示液氮罐、冻存盒和孔位。打开其他液氮罐中的结果时，程序会自动切换并高亮对应孔位。较长的匹配孔位和细胞清单会在结果卡片内自动换行，右侧“打开盒子”按钮始终保留可见。
 
 包含批量移动或批量清空的高级搜索只作用于当前液氮罐，以避免跨罐误操作。离开当前冻存盒、切换液氮罐或打开其他冻存盒时，程序会自动清除批量选择和快捷移动等临时状态。
 
@@ -353,6 +355,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - A box location concatenates its column and level. For example, `41` means column 4, level 1, while `410` means column 4, level 10.
 - Increasing the tank dimensions can be saved directly. Before reducing them, move or clear inventory outside the new range. The application does not automatically relocate or delete tubes.
 - Each box location corresponds to one cryobox. Boxes default to a 9×9 layout, adjustable from 1×1 to 20×20.
+- When changing a cryobox layout, apply it either to the current cryobox only or to every cryobox in the current tank. A tank-wide reduction is rejected in full if any cell lies outside the new layout.
 - Each occupied position represents one cryovial.
 - The position grid supports zooming, fit-to-window sizing, and horizontal or vertical scrolling.
 
@@ -363,10 +366,12 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Overview cards display counts and descriptions on separate lines to prevent crowding in small windows.
 - Rounded buttons use an approximately 100-millisecond hover color transition and support rapid pointer entry and exit. Navigation and actions do not wait for animations.
 - Sidebar buttons use background highlighting without an additional focus outline. Other buttons show a high-contrast border when keyboard-focused, and input fields show a blue focus border.
+- Cryobox zoom, fit-to-window, and layout controls use background highlighting instead of an additional focus outline.
+- The cryobox layout dialog uses larger, equally sized Cancel and Confirm buttons.
 
 ## Search and Batch Operations
 
-The standard cell search (查找细胞) searches all non-archived tanks and displays the tank, box, and position for each result. Opening a result from another tank automatically switches to that tank and highlights the matching positions.
+The standard cell search (查找细胞) searches all non-archived tanks and displays the tank, box, and position for each result. Opening a result from another tank automatically switches to that tank and highlights the matching positions. Long position and cell lists wrap within each result card so the Open Box button remains visible.
 
 Advanced search with batch move or batch clear operations is restricted to the current tank to prevent unintended cross-tank changes. Leaving the current box, switching tanks, or opening another box clears temporary states such as batch selections and quick-move mode.
 
