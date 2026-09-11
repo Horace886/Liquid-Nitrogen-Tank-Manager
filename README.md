@@ -69,6 +69,10 @@ py -3 liquid_nitrogen_tank_manager.py
 liquid_nitrogen_tank_storage.db
 ```
 
+### 程序在任务栏中无法打开或关闭
+
+如果程序仍显示在任务栏中，但无法打开窗口，也无法从任务栏关闭，请按 `Ctrl + Shift + Esc` 打开 Windows 任务管理器，在“进程”或“详细信息”中找到本程序对应的 `pythonw.exe`（或 `python.exe`），选择“结束任务”。确认进程结束后，任务栏图标会消失，此时可以重新启动程序。
+
 ## 数据安全
 
 - `liquid_nitrogen_tank_storage.db` 是本机库存数据库，不应提交到 GitHub。
@@ -78,10 +82,45 @@ liquid_nitrogen_tank_storage.db
 - GitHub 仓库不包含本地数据库，因此不能代替数据库备份；请另外妥善保存 `backups/`。
 - 测试和开发时不要使用真实数据库造数，使用临时目录或数据库副本。
 
+## 升级与数据迁移
+
+数据库迁移是升级的首选方式，Excel 库存台账是数据库迁移失败时保护核心细胞位置的最终保障。升级前建议同时保留 SQLite 数据库和 Excel 两种备份。
+
+### 使用数据库升级（推荐）
+
+1. 完全退出旧版程序。
+2. 在旧版“备份与恢复”中创建一次手动备份，并导出一份完整库存 Excel。
+3. 将旧版目录中的 `liquid_nitrogen_tank_storage.db` 和整个 `backups/` 文件夹复制到独立的安全位置。
+4. 将 GitHub 新版本解压到新文件夹，不要直接删除或覆盖旧版目录。
+5. 把旧版的 `liquid_nitrogen_tank_storage.db` 和 `backups/` 复制到新版目录，再启动新版。程序会自动补齐受支持的数据库表和字段。
+6. 核对液氮罐数量、冻存管总数、关键细胞位置和出入库历史数量。确认无误前，请保留旧版目录和升级前数据库副本。
+
+如果升级失败，请关闭新版并恢复升级前保存的数据库副本。不要用旧版程序直接打开已经被新版迁移过的数据库。
+
+### 使用 Excel 兜底迁入
+
+只有数据库无法正常迁移时，才建议在空白的新版数据库中导入旧版导出的完整库存 Excel。先检查导入预览；恢复到空白数据库时选择“覆盖同名液氮罐”，导入后核对预览数量、实际库存数量以及若干关键细胞的完整位置。数据库已经成功迁移时不要再次导入同一份 Excel，以免产生不必要的覆盖或合并。
+
+Excel 兜底迁入可以保留：
+
+- 未归档液氮罐的名称。
+- 冻存盒位、盒内孔位和完整位置，例如 `41/A2`。
+- 细胞名称、细胞类别、入库日期、入库人和备注。
+
+Excel 兜底迁入不能完整保留：
+
+- 出入库历史、库存预警设置和归档状态。
+- 已归档液氮罐；当前完整库存导出不包含已归档液氮罐。
+- 自定义冻存盒名称、精确盒布局、空盒和空孔。
+- `sample_id`；数量会按“每个孔位一支冻存管”恢复。
+- 没有被已占用位置体现出来的液氮罐空余规格；导入新液氮罐时会根据最大已占用盒位推断规格。
+
+因此，Excel 适合恢复最核心的“细胞名称 → 液氮罐 → 冻存盒位 → 盒内孔位”关系，但不能替代完整的 SQLite 数据库备份。
+
 ## 液氮罐和冻存盒结构
 
-- 每个新建液氮罐默认有 4 列、每列 5 层，共 20 个冻存盒位；每个液氮罐可独立调整为 1–9 列、1–9 层。
-- 盒位编号由“列 + 层”组成，例如 `41` 表示第 4 列、第 1 层。
+- 每个新建液氮罐默认有 4 列、每列 5 层，共 20 个冻存盒位；每个液氮罐可独立调整为 1–9 列、1–20 层。
+- 盒位编号由“列 + 层”直接拼接，例如 `41` 表示第 4 列、第 1 层，`410` 表示第 4 列、第 10 层。
 - 扩大规格可直接保存；缩小规格前必须先移动或清空新范围以外的库存，程序不会自动搬移或删除冻存管。
 - 每个盒位对应一个冻存盒；冻存盒默认布局为 9×9，可在 1×1 到 20×20 之间调整。
 - 每个盒内孔位按 1 支冻存管统计。
@@ -95,6 +134,7 @@ liquid_nitrogen_tank_storage.db
 - 圆角按钮提供约 100 毫秒的悬停颜色过渡，支持快速移入、移出；切页和执行操作不会等待动画。
 - 侧栏按钮仅使用背景高亮，不显示额外焦点框；其他按钮键盘聚焦时显示高对比边框，输入框聚焦时显示蓝色边框。
 - 冻存盒的放大、缩小和适应窗口按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
+- 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
 
 ## 搜索和批量操作
 
@@ -103,6 +143,8 @@ liquid_nitrogen_tank_storage.db
 包含批量移动或批量清空的高级搜索只作用于当前液氮罐，以避免跨罐误操作。离开当前冻存盒、切换液氮罐或打开其他冻存盒时，程序会自动清除批量选择和快捷移动等临时状态。
 
 冻存盒总览和盒内批量选择支持 Windows 风格的连续选择：先点击起点，再按住 `Shift` 点击终点，即可选中界面顺序中两者之间的全部项目；批量模式状态栏会显示操作提示。选中项目使用蓝色描边，仍保留空位或已有细胞的原有底色。
+
+批量移动时，源冻存盒按编号升序逐一分配目标空盒位。已分配的目标会直接显示“源盒 → 目标盒位”；点击已配对目标只撤销该项。蓝色描边只表示已经建立的配对，未配对或撤销后的目标不会保留蓝框。全部配对完成后，程序会用可滚动清单再次确认完整对应关系，再创建备份并执行移动。
 
 “查找空位”可以在当前或全部液氮罐中推荐同盒连续空孔。打开推荐结果后，程序会高亮并选中对应孔位。
 
@@ -124,7 +166,7 @@ liquid_nitrogen_tank_storage.db
 
 - 程序会先显示导入预览。
 - 程序会在导入前自动创建数据库备份。
-- 盒位编号必须为 `11`–`99` 范围内的两位有效编码；导入已有液氮罐时，位置不能超出该罐当前规格。
+- 盒位编号必须由 1–9 的列号和 1–20 的层号拼接而成；导入已有液氮罐时，位置不能超出该罐当前规格。
 - 导入新液氮罐时会按库存中的最大列、层推断规格，且不低于默认的 4 列 × 5 层。
 - 导入和导出操作本身不会写入出入库登记。
 
@@ -257,6 +299,10 @@ On first launch, the application creates a local database in the project directo
 liquid_nitrogen_tank_storage.db
 ```
 
+### The application cannot be opened or closed from the taskbar
+
+If the application remains on the taskbar but its window cannot be opened or closed, press `Ctrl + Shift + Esc` to open Windows Task Manager. Under **Processes** or **Details**, find the `pythonw.exe` (or `python.exe`) process belonging to this application and select **End task**. After the process and taskbar item disappear, start the application again.
+
 ## Data Safety
 
 - `liquid_nitrogen_tank_storage.db` contains local inventory data and must not be committed to GitHub.
@@ -266,10 +312,45 @@ liquid_nitrogen_tank_storage.db
 - The GitHub repository does not contain your local database and is not a substitute for database backups. Store `backups/` safely elsewhere as well.
 - Use temporary directories or database copies for development and testing; never populate the real inventory database with test data.
 
+## Upgrades and Data Migration
+
+Database migration is the preferred upgrade path. An Excel inventory workbook is the final fallback for protecting core cell-location data if database migration fails. Keep both SQLite and Excel backups before upgrading.
+
+### Upgrade with the Database (Recommended)
+
+1. Exit the old application completely.
+2. Create a manual backup from **Backup / Restore** and export a complete inventory workbook from the old version.
+3. Copy `liquid_nitrogen_tank_storage.db` and the entire `backups/` folder from the old version to a separate safe location.
+4. Extract the new GitHub release to a new folder. Do not delete or overwrite the old version folder.
+5. Copy the old `liquid_nitrogen_tank_storage.db` and `backups/` into the new version folder before launching it. The application will add supported database tables and columns automatically.
+6. Verify the number of tanks, total tubes, critical cell locations, and stock-activity records. Keep the old folder and pre-upgrade database copy until the new version is confirmed working.
+
+If the upgrade fails, close the new version and restore the pre-upgrade database copy. Do not open a database already migrated by the new version with the old application.
+
+### Recover by Importing Excel
+
+Use Excel only when the database cannot be migrated. Import the complete inventory workbook exported by the old version into a blank new-version database, review the import preview, and choose **Replace matching tanks** when restoring into the blank database. After import, compare the preview count with the actual inventory count and inspect several critical full locations. Do not import the same workbook after a successful database migration, because it may cause unnecessary replacement or merging.
+
+Excel fallback import preserves:
+
+- Names of non-archived tanks.
+- Box slots, positions within each box, and full locations such as `41/A2`.
+- Cell name, cell type, stock-in date, stock-in operator, and notes.
+
+Excel fallback import does not fully preserve:
+
+- Stock-activity history, inventory-alert settings, or archive state.
+- Archived tanks, because the current complete inventory export excludes them.
+- Custom cryobox names, exact box layouts, empty boxes, or empty positions.
+- `sample_id`; quantity is restored as one tube per occupied position.
+- Unused tank dimensions not represented by occupied positions; new tank dimensions are inferred from the highest occupied box location.
+
+Excel is therefore suitable for recovering the essential **cell name → tank → box slot → position** relationship, but it is not a replacement for a complete SQLite database backup.
+
 ## Tank and Cryobox Layout
 
-- Each new tank defaults to 4 columns and 5 levels, providing 20 box locations. Each tank can independently be configured with 1–9 columns and 1–9 levels.
-- A box location consists of two digits: column followed by level. For example, `41` means column 4, level 1.
+- Each new tank defaults to 4 columns and 5 levels, providing 20 box locations. Each tank can independently be configured with 1–9 columns and 1–20 levels.
+- A box location concatenates its column and level. For example, `41` means column 4, level 1, while `410` means column 4, level 10.
 - Increasing the tank dimensions can be saved directly. Before reducing them, move or clear inventory outside the new range. The application does not automatically relocate or delete tubes.
 - Each box location corresponds to one cryobox. Boxes default to a 9×9 layout, adjustable from 1×1 to 20×20.
 - Each occupied position represents one cryovial.
@@ -309,7 +390,7 @@ When importing Excel files:
 
 - The application shows a preview first.
 - A database backup is created automatically before the import.
-- Box locations must be valid two-digit codes from `11` to `99`, with each digit between 1 and 9. Locations imported into an existing tank must fit its current dimensions.
+- Box locations must concatenate a column from 1–9 and a level from 1–20. Locations imported into an existing tank must fit its current dimensions.
 - For a newly imported tank, dimensions are inferred from the highest column and level in the inventory, with a minimum of the default 4 columns × 5 levels.
 - Import and export operations themselves do not create stock-in/stock-out events.
 

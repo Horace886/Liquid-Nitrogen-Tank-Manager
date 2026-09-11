@@ -636,7 +636,7 @@ def _bind_ime_safe_return(widget: tk.Misc, action: Callable[[], None]) -> None:
 
 
 def compartment_code(column: int, layer: int) -> str:
-    """Return the 2-digit liquid-nitrogen box-position code: column + layer."""
+    """Return the liquid-nitrogen box-position code: column + layer."""
     return f"{column}{layer}"
 
 
@@ -646,9 +646,10 @@ def unit_code(column: int, layer: int) -> str:
 
 
 def parse_unit_code(code: str) -> tuple[int, int] | None:
-    if not re.fullmatch(r"[1-9][1-9]", code):
+    match = re.fullmatch(r"([1-9])([1-9]|1[0-9]|20)", code)
+    if not match:
         return None
-    return tuple(int(char) for char in code)  # type: ignore[return-value]
+    return int(match.group(1)), int(match.group(2))
 
 
 def compact_box_positions(positions: list[str] | tuple[str, ...]) -> str:
@@ -1412,13 +1413,12 @@ class StorageSpecDialog(ui.Toplevel):
         picker.pack(fill="x")
         picker.columnconfigure(0, weight=1)
         picker.columnconfigure(2, weight=1)
-        values = tuple(str(value) for value in range(1, 10))
         self.columns_var = tk.StringVar(value=str(columns))
         self.layers_var = tk.StringVar(value=str(layers))
 
-        for grid_column, label, variable in (
-            (0, msg('列数'), self.columns_var),
-            (2, msg('层数'), self.layers_var),
+        for grid_column, label, variable, values in (
+            (0, msg('列数'), self.columns_var, tuple(str(value) for value in range(1, 10))),
+            (2, msg('层数'), self.layers_var, tuple(str(value) for value in range(1, 21))),
         ):
             field = tk.Frame(picker, bg=COLORS["panel"])
             field.grid(row=0, column=grid_column, sticky="ew")
@@ -1603,6 +1603,86 @@ class InventoryLocationsDialog(ui.Toplevel):
         self.wait_window()
 
 
+class BoxMoveConfirmDialog(ui.Toplevel):
+    """Show every source-to-target mapping before a batch move is committed."""
+
+    def __init__(self, parent: tk.Misc, target_name: str, mappings: list[tuple[str, str]]):
+        super().__init__(parent)
+        self.result = False
+        self.title(msg('确认批量移动'))
+        self.configure(bg=COLORS["panel"])
+        self.minsize(460, 360)
+        self.resizable(True, True)
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+        header = tk.Frame(self, bg=COLORS["sidebar"], height=60)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        ui.Label(header, text=msg('确认批量移动'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=22, pady=17)
+
+        intro = tk.Frame(self, bg=COLORS["panel"])
+        intro.pack(fill="x", padx=22, pady=(18, 10))
+        ui.Label(intro, text=msg('目标液氮罐：{0}', target_name), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
+        ui.Label(intro, text=msg('请核对以下 {0} 个冻存盒的移动对应关系。确认后将创建备份并执行移动。', len(mappings)), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8), wraplength=500, justify="left").pack(anchor="w", pady=(4, 0))
+
+        list_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        list_panel.pack(fill="both", expand=True, padx=22, pady=(0, 12))
+        headings = tk.Frame(list_panel, bg="#F4F7FB")
+        headings.pack(fill="x")
+        for column, text in enumerate((msg('序号'), msg('源冻存盒'), msg('目标盒位'))):
+            headings.columnconfigure(column, weight=1)
+            ui.Label(headings, text=text, bg="#F4F7FB", fg=COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), pady=8).grid(row=0, column=column, sticky="ew")
+        scroller = ScrollableFrame(list_panel)
+        self.mapping_scroller = scroller
+        scroller.pack(fill="both", expand=True)
+        rows = tk.Frame(scroller.body, bg=COLORS["panel"])
+        self.mapping_rows = rows
+        rows.pack(fill="both", expand=True)
+        for index, (source, target) in enumerate(mappings, start=1):
+            row_bg = COLORS["panel"] if index % 2 else "#F8FAFD"
+            row = tk.Frame(rows, bg=row_bg)
+            row.pack(fill="x")
+            row.columnconfigure((0, 1, 2), weight=1)
+            ui.Label(row, text=str(index), bg=row_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), pady=8).grid(row=0, column=0, sticky="ew")
+            ui.Label(row, text=source, bg=row_bg, fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold"), pady=8).grid(row=0, column=1, sticky="ew")
+            ui.Label(row, text=target, bg=row_bg, fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"), pady=8).grid(row=0, column=2, sticky="ew")
+
+        footer = tk.Frame(self, bg=COLORS["panel"])
+        footer.pack(fill="x")
+        RoundedButton(footer, text=msg('确认并移动'), command=self._confirm, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=112, height=40, radius=10).pack(side="right", padx=(8, 22), pady=(0, 14))
+        RoundedButton(footer, text=msg('返回修改'), command=self._cancel, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=96, height=40, radius=10).pack(side="right", pady=(0, 14))
+
+        self.bind("<Escape>", lambda _event: self._cancel())
+        self.bind("<Return>", lambda _event: self._confirm())
+        self.update_idletasks()
+        width = min(560, max(480, parent.winfo_width() - 240))
+        height = min(620, max(380, parent.winfo_height() - 100))
+        left = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
+        top = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
+        self.geometry(msg('{0}x{1}+{2}+{3}', width, height, left, top))
+        self.grab_set()
+
+    def _confirm(self) -> None:
+        self.result = True
+        self._close()
+
+    def _cancel(self) -> None:
+        self.result = False
+        self._close()
+
+    def _close(self) -> None:
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        self.destroy()
+
+    def show(self) -> bool:
+        self.wait_window()
+        return self.result
+
+
 class BoxMoveDialog(ui.Toplevel):
     """Visually select a target tank and exact empty box positions."""
 
@@ -1610,10 +1690,13 @@ class BoxMoveDialog(ui.Toplevel):
         super().__init__(parent)
         self.parent_app = parent
         self.repository = parent.repository
-        self.source_codes = sorted(source_codes)
+        self.source_codes = sorted(
+            source_codes, key=lambda code: parse_unit_code(code) or (0, 0)
+        )
         self.required_count = len(self.source_codes)
         self.result: tuple[str, list[str]] | None = None
-        self.selected_targets: list[str] = []
+        self.target_by_source: dict[str, str] = {}
+        self.active_source: str | None = self.source_codes[0] if self.source_codes else None
         self.target_buttons: dict[str, RoundedButton] = {}
         self.freezer_items = self.repository.list_freezers()
         self.freezer_ids = [item[0] for item in self.freezer_items]
@@ -1648,7 +1731,8 @@ class BoxMoveDialog(ui.Toplevel):
         grid_panel.pack(fill="both", expand=True, padx=20, pady=(0, 12))
         grid_head = tk.Frame(grid_panel, bg=COLORS["panel"])
         grid_head.pack(fill="x", padx=18, pady=(13, 7))
-        ui.Label(grid_head, text=msg('点击空盒位作为目标'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
+        self.current_source_label = ui.Label(grid_head, text="", bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
+        self.current_source_label.pack(side="left")
         ui.Label(grid_head, text=msg('绿色可选 · 灰色已占用'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="right")
         self.grid_scroller = ScrollableFrame(grid_panel, horizontal=True)
         self.grid_scroller.pack(fill="both", expand=True, padx=16, pady=(0, 16))
@@ -1679,7 +1763,8 @@ class BoxMoveDialog(ui.Toplevel):
         return self.freezer_ids[index]
 
     def _change_freezer(self, _event: tk.Event | None = None) -> None:
-        self.selected_targets.clear()
+        self.target_by_source.clear()
+        self.active_source = self.source_codes[0] if self.source_codes else None
         self._render_grid()
 
     def _render_grid(self) -> None:
@@ -1690,7 +1775,7 @@ class BoxMoveDialog(ui.Toplevel):
         target = self.repository.freezers[target_id]
         columns = target.storage_columns
         layers = target.storage_layers
-        for index in range(10):
+        for index in range(21):
             self.grid.columnconfigure(index, weight=0)
             self.grid.rowconfigure(index, weight=0)
         for column in range(columns + 1):
@@ -1719,6 +1804,7 @@ class BoxMoveDialog(ui.Toplevel):
                         width=110,
                         height=55,
                         radius=9,
+                        focus_outline=False,
                     )
                     self.target_buttons[code] = button
                     button.grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
@@ -1727,30 +1813,53 @@ class BoxMoveDialog(ui.Toplevel):
         self._refresh_selection_status()
 
     def _toggle_target(self, code: str) -> None:
-        if code in self.selected_targets:
-            self.selected_targets.remove(code)
-        elif len(self.selected_targets) < self.required_count:
-            self.selected_targets.append(code)
+        source = next((source for source, target in self.target_by_source.items() if target == code), None)
+        if source is not None:
+            del self.target_by_source[source]
+            self.active_source = source
+        elif self.active_source is not None:
+            self.target_by_source[self.active_source] = code
+            self.active_source = next((source for source in self.source_codes if source not in self.target_by_source), None)
         self._refresh_selection_status()
 
     def _refresh_selection_status(self) -> None:
-        self.selection_label.configure(text=msg('已选 {0} / {1} 个目标盒位', len(self.selected_targets), self.required_count))
+        assigned_count = len(self.target_by_source)
+        self.selection_label.configure(text=msg('已配对 {0} / {1}', assigned_count, self.required_count), fg=COLORS["primary"])
+        if self.active_source is None:
+            self.current_source_label.configure(text=msg('对应关系已完成，请确认移动'), fg=COLORS["occupied_text"])
+        else:
+            source_order = self.source_codes.index(self.active_source) + 1
+            self.current_source_label.configure(text=msg('当前：{0} → 请选择目标空盒位（第 {1}/{2} 个）', self.active_source, source_order, self.required_count), fg=COLORS["text"])
+        source_by_target = {target: source for source, target in self.target_by_source.items()}
         for code, button in self.target_buttons.items():
-            selected = code in self.selected_targets
-            order = self.selected_targets.index(code) + 1 if selected else 0
-            button.set_text(msg('✓ {0}\n目标 {1}', code, order) if selected else msg('{0}\n空盒位', code))
+            source = source_by_target.get(code)
+            selected = source is not None
+            button.set_text(msg('{0} → {1}\n已配对', source, code) if selected else msg('{0}\n空盒位', code))
             button.set_palette(
-                fill=COLORS["primary"] if selected else "#F1F8F5",
-                foreground="white" if selected else COLORS["occupied_text"],
-                hover_fill=COLORS["primary_dark"] if selected else "#D8F0E4",
+                fill="#F1F8F5",
+                foreground=COLORS["occupied_text"],
+                hover_fill="#D8F0E4",
                 border=COLORS["primary"] if selected else "#C9E9D9",
+                border_width=2 if selected else 1,
             )
 
     def _confirm(self) -> None:
-        if len(self.selected_targets) != self.required_count:
-            self.selection_label.configure(text=msg('还需选择 {0} 个目标盒位', self.required_count - len(self.selected_targets)), fg=COLORS["danger"])
+        if len(self.target_by_source) != self.required_count:
+            self.selection_label.configure(text=msg('还需选择 {0} 个目标盒位', self.required_count - len(self.target_by_source)), fg=COLORS["danger"])
             return
-        self.result = (self._target_freezer_id(), list(self.selected_targets))
+        mappings = [(source, self.target_by_source[source]) for source in self.source_codes]
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        confirmed = BoxMoveConfirmDialog(self, self.freezer_var.get(), mappings).show()
+        if not confirmed:
+            try:
+                self.grab_set()
+            except tk.TclError:
+                pass
+            return
+        self.result = (self._target_freezer_id(), [target for _source, target in mappings])
         self._close()
 
     def _cancel(self) -> None:
@@ -2609,7 +2718,7 @@ class ScrollableFrame(ttk.Frame):
             self.viewport, background=COLORS["bg"], highlightthickness=0, borderwidth=0
         )
         self.scrollbar = ttk.Scrollbar(self.viewport, orient="vertical", command=self.canvas.yview, style="Flat.Vertical.TScrollbar")
-        self.horizontal_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+        self.horizontal_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview, style="Flat.Horizontal.TScrollbar")
         self.body = ttk.Frame(self.canvas, style="Page.TFrame")
         self._window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set, xscrollcommand=self.horizontal_scrollbar.set)
@@ -4825,7 +4934,10 @@ class FreezerManagerApp(tk.Tk):
         button = getattr(self, "overview_compartment_buttons", {}).get(code)
         if button is None or not button.winfo_exists():
             return
-        column, layer = (int(char) for char in code)
+        parsed = parse_unit_code(code)
+        if parsed is None:
+            return
+        column, layer = parsed
         used = self.repository.compartment_usage(column, layer)
         occupied = used > 0
         selected = code in self.selected_compartments
@@ -4840,14 +4952,21 @@ class FreezerManagerApp(tk.Tk):
 
     def _overview_selected_unit_codes(self, *, occupied_only: bool) -> list[str]:
         codes: list[str] = []
-        for compartment in sorted(self.selected_compartments):
+        for compartment in sorted(
+            self.selected_compartments,
+            key=lambda code: parse_unit_code(code) or (0, 0),
+        ):
             if not occupied_only or self.repository.get(compartment).occupied:
                 codes.append(compartment)
         return codes
 
     def _overview_selected_box_codes(self, *, occupied_only: bool) -> list[str]:
         return [
-            code for code in sorted(self.selected_compartments)
+            code
+            for code in sorted(
+                self.selected_compartments,
+                key=lambda value: parse_unit_code(value) or (0, 0),
+            )
             if not occupied_only or self.repository.box_has_samples(code)
         ]
 

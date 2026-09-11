@@ -108,9 +108,10 @@ def unit_code(column: int, layer: int) -> str:
 
 
 def parse_unit_code(code: str) -> tuple[int, int] | None:
-    if not re.fullmatch(r"[1-9][1-9]", code):
+    match = re.fullmatch(r"([1-9])([1-9]|1[0-9]|20)", code)
+    if not match:
         return None
-    return tuple(int(char) for char in code)  # type: ignore[return-value]
+    return int(match.group(1)), int(match.group(2))
 
 
 def all_unit_codes(columns: int = 4, layers: int = 5) -> list[str]:
@@ -469,7 +470,7 @@ class FreezerRepository:
                         {},
                         bool(row["archived"]),
                         max(1, min(9, int(row["storage_columns"]))),
-                        max(1, min(9, int(row["storage_layers"]))),
+                        max(1, min(20, int(row["storage_layers"]))),
                     )
                 for row in connection.execute("SELECT * FROM unit_records ORDER BY code"):
                     freezer = loaded.get(row["freezer_id"])
@@ -671,8 +672,8 @@ class FreezerRepository:
         return max(sample_count, legacy_count)
 
     def storage_resize_conflicts(self, columns: int, layers: int) -> list[str]:
-        if not (1 <= columns <= 9 and 1 <= layers <= 9):
-            raise ValueError("液氮罐的列数和层数需要在 1 到 9 之间。")
+        if not (1 <= columns <= 9 and 1 <= layers <= 20):
+            raise ValueError("液氮罐列数需要在 1 到 9 之间，层数需要在 1 到 20 之间。")
         freezer_id = self.current_freezer_id
         occupied_codes = {
             code for code, record in self.current_freezer.records.items() if record.occupied
@@ -689,7 +690,7 @@ class FreezerRepository:
                 if (parsed := parse_unit_code(code))
                 and (parsed[0] > columns or parsed[1] > layers)
             ),
-            key=lambda code: tuple(int(char) for char in code),
+            key=lambda code: parse_unit_code(code) or (0, 0),
         )
 
     def configure_storage(self, columns: int, layers: int) -> None:
@@ -1141,7 +1142,9 @@ class FreezerRepository:
                 tube_records = {
                     key: value
                     for key, value in incoming_records.items()
-                    if re.fullmatch(r"[1-9][1-9]/[A-Za-z]+[1-9][0-9]*", key)
+                    if "/" in key
+                    and parse_unit_code(key.split("/", 1)[0])
+                    and re.fullmatch(r"[A-Za-z]+[1-9][0-9]*", key.split("/", 1)[1])
                 }
                 if overwrite:
                     target.records = {}
@@ -1739,7 +1742,13 @@ class FreezerRepository:
         for item in locations:
             item["positions"] = sorted(item["positions"], key=self.parse_box_position)
             item["samples"] = sorted(item["samples"], key=lambda pair: self.parse_box_position(pair[0]))
-        return sorted(locations, key=lambda item: (str(item["freezer_name"]).casefold(), str(item["code"])))
+        return sorted(
+            locations,
+            key=lambda item: (
+                str(item["freezer_name"]).casefold(),
+                parse_unit_code(str(item["code"])) or (0, 0),
+            ),
+        )
 
     def search_box_samples(
         self,
@@ -1779,7 +1788,11 @@ class FreezerRepository:
             results.append((stored_freezer_id, freezer.name, code, position, copy.deepcopy(sample)))
         return sorted(
             results,
-            key=lambda item: (item[1].casefold(), item[2], self.parse_box_position(item[3])),
+            key=lambda item: (
+                item[1].casefold(),
+                parse_unit_code(item[2]) or (0, 0),
+                self.parse_box_position(item[3]),
+            ),
         )
 
     def search_all_freezer_records(self, query: str) -> list[tuple[str, str, str, UnitRecord]]:
@@ -1804,7 +1817,10 @@ class FreezerRepository:
                 if needle and not any(needle in field.casefold() for field in fields):
                     continue
                 results.append((freezer_id, freezer.name, code, copy.deepcopy(record)))
-        return sorted(results, key=lambda item: (item[1].casefold(), item[2]))
+        return sorted(
+            results,
+            key=lambda item: (item[1].casefold(), parse_unit_code(item[2]) or (0, 0)),
+        )
 
     def advanced_box_search(
         self,
@@ -1830,7 +1846,10 @@ class FreezerRepository:
                 item = grouped.setdefault(code, {"code": code, "positions": [], "samples": []})
                 item["positions"].append(position)
                 item["samples"].append(copy.deepcopy(sample))
-            return [grouped[code] for code in sorted(grouped)]
+            return [
+                grouped[code]
+                for code in sorted(grouped, key=lambda value: parse_unit_code(value) or (0, 0))
+            ]
 
         # An empty-box query applies to box codes themselves. Cell-specific
         # filters cannot match a box which contains no cells.
@@ -1882,7 +1901,7 @@ class FreezerRepository:
         )
 
     def move_boxes(self, source_codes: list[str], target_freezer_id: str, target_codes: list[str]) -> list[tuple[str, str]]:
-        sources = sorted(set(source_codes))
+        sources = sorted(set(source_codes), key=lambda code: parse_unit_code(code) or (0, 0))
         targets = list(dict.fromkeys(target_codes))
         if not sources or len(sources) != len(targets):
             raise ValueError("源冻存盒与目标盒位数量必须一致。")
@@ -1925,7 +1944,10 @@ class FreezerRepository:
             raise
 
     def batch_move(self, codes: list[str], target_freezer_id: str, start_code: str) -> list[tuple[str, str]]:
-        ordered = sorted({code for code in codes if code in self.records and self.records[code].occupied})
+        ordered = sorted(
+            {code for code in codes if code in self.records and self.records[code].occupied},
+            key=lambda code: parse_unit_code(code) or (0, 0),
+        )
         if not ordered:
             raise ValueError("请至少选择一条已占用记录。")
         if target_freezer_id not in self.freezers or self.freezers[target_freezer_id].archived:
@@ -2006,7 +2028,7 @@ class FreezerRepository:
         codes = (
             all_unit_codes(self.storage_columns, self.storage_layers)
             if status == "empty"
-            else sorted(self.records)
+            else sorted(self.records, key=lambda code: parse_unit_code(code) or (0, 0))
         )
         results: list[tuple[str, UnitRecord]] = []
         for code in codes:

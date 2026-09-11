@@ -80,20 +80,29 @@ with TemporaryDirectory() as folder:
         raise RuntimeError(f"tank specification actions are incorrect: {overview_actions}")
     spec_dialog = manager.StorageSpecDialog(app, 4, 5)
     spec_dialog.columns_var.set("7")
-    spec_dialog.layers_var.set("6")
+    spec_dialog.layers_var.set("20")
     spec_dialog._refresh_preview()
-    if "42个盒位" not in str(spec_dialog.preview_label.cget("text")):
+    if "140个盒位" not in str(spec_dialog.preview_label.cget("text")):
         raise RuntimeError("tank specification preview did not update its capacity")
     spec_dialog._confirm()
     app.update()
-    if spec_dialog.result != (7, 6):
+    if spec_dialog.result != (7, 20):
         raise RuntimeError(f"tank specification result is incorrect: {spec_dialog.result}")
-    repository.configure_storage(7, 6)
+    repository.configure_storage(9, 20)
     app.overview_batch_mode = True
     app.show_overview()
     app.update_idletasks()
-    if len(app.overview_compartment_buttons) != 42:
-        raise RuntimeError("7-column by 6-layer overview did not render all box positions")
+    if len(app.overview_compartment_buttons) != 180:
+        raise RuntimeError("9-column by 20-layer overview did not render all box positions")
+    overview_scrollers = [
+        child for child in descendants(app.content)
+        if isinstance(child, manager.ScrollableFrame) and child.horizontal
+    ]
+    if len(overview_scrollers) != 1 or (
+        str(overview_scrollers[0].scrollbar.cget("style")) != "Flat.Vertical.TScrollbar"
+        or str(overview_scrollers[0].horizontal_scrollbar.cget("style")) != "Flat.Horizontal.TScrollbar"
+    ):
+        raise RuntimeError("9x9 overview scrollbars do not use matching flat styles")
     overview_shift_hints = [
         child for child in descendants(app.content)
         if isinstance(child, tk.Label) and "Shift" in str(child.cget("text"))
@@ -254,6 +263,97 @@ with TemporaryDirectory() as folder:
     app.update_idletasks()
     if app.page_title_var.get() != "查找细胞 · 全部液氮罐":
         raise RuntimeError(f"basic cell search is not global: {app.page_title_var.get()}")
+
+    repository.switch_freezer(first_freezer_id)
+    move_sources = ["21", "22", "23", "24", "25"]
+    for source in move_sources:
+        repository.set_box_sample(
+            source,
+            "A1",
+            BoxSample(
+                sample_name=f"Cell {source}",
+                sample_type="Primary cell",
+                stored_date="2026-08-14",
+                stored_by="Horace",
+            ),
+        )
+    move_dialog = manager.BoxMoveDialog(app, ["25", "21", "24", "22", "23"])
+    app.update_idletasks()
+    if move_dialog.source_codes != move_sources or move_dialog.active_source != "21":
+        raise RuntimeError("batch move sources are not assigned in numeric order")
+    move_dialog._toggle_target("41")
+    move_dialog._confirm()
+    if move_dialog.result is not None or "还需选择" not in str(move_dialog.selection_label.cget("text")):
+        raise RuntimeError("incomplete batch move mapping was allowed to submit")
+
+    second_index = move_dialog.freezer_ids.index(second_freezer_id)
+    move_dialog.freezer_picker.current(second_index)
+    move_dialog._change_freezer()
+    if move_dialog.target_by_source or move_dialog.active_source != "21":
+        raise RuntimeError("changing the destination tank did not reset batch move mappings")
+    first_index = move_dialog.freezer_ids.index(first_freezer_id)
+    move_dialog.freezer_picker.current(first_index)
+    move_dialog._change_freezer()
+    for target in ("41", "42", "43", "44", "45"):
+        move_dialog._toggle_target(target)
+    expected_mappings = dict(zip(move_sources, ("41", "42", "43", "44", "45")))
+    if move_dialog.target_by_source != expected_mappings or move_dialog.active_source is not None:
+        raise RuntimeError(f"sequential batch move mapping failed: {move_dialog.target_by_source}")
+    if move_dialog.target_buttons["43"]._text != "23 → 43\n已配对":
+        raise RuntimeError("assigned destination does not display its source-to-target mapping")
+    extra_button = next(
+        button
+        for code, button in move_dialog.target_buttons.items()
+        if code not in move_dialog.target_by_source.values()
+    )
+    extra_button._invoke()
+    app.update()
+    if move_dialog.target_by_source != expected_mappings or extra_button.itemcget("surface", "outline") == manager.COLORS["primary"]:
+        raise RuntimeError("completed batch move allowed an extra target or left a false selection outline")
+    move_dialog.target_buttons["43"]._invoke()
+    app.update()
+    if move_dialog.active_source != "23" or move_dialog.target_by_source != {key: value for key, value in expected_mappings.items() if key != "23"}:
+        raise RuntimeError("removing one batch move mapping changed other mappings")
+    if move_dialog.target_buttons["43"].itemcget("surface", "outline") == manager.COLORS["primary"]:
+        raise RuntimeError("removed batch move mapping kept a false selection outline")
+    move_dialog.target_buttons["43"]._invoke()
+    app.update()
+
+    preview_mappings = [(str(index), str(index + 100)) for index in range(1, 41)]
+    confirm_preview = manager.BoxMoveConfirmDialog(move_dialog, repository.freezer_name, preview_mappings)
+    app.update()
+    if len(confirm_preview.mapping_rows.winfo_children()) != len(preview_mappings):
+        raise RuntimeError("batch move confirmation does not show every mapping")
+    if confirm_preview.winfo_height() > confirm_preview.winfo_screenheight():
+        raise RuntimeError("batch move confirmation exceeds the available screen height")
+    confirm_preview._cancel()
+    move_dialog.grab_set()
+
+    original_confirm_dialog = manager.BoxMoveConfirmDialog
+    confirm_outcomes = iter((False, True))
+    captured_mappings: list[list[tuple[str, str]]] = []
+
+    class ConfirmStub:
+        def __init__(self, _parent, _target_name, mappings):
+            captured_mappings.append(list(mappings))
+
+        def show(self):
+            return next(confirm_outcomes)
+
+    manager.BoxMoveConfirmDialog = ConfirmStub
+    try:
+        move_dialog._confirm()
+        if move_dialog.result is not None or move_dialog.target_by_source != expected_mappings:
+            raise RuntimeError("canceling final batch move confirmation lost the mappings")
+        move_dialog._confirm()
+    finally:
+        manager.BoxMoveConfirmDialog = original_confirm_dialog
+    expected_result = (first_freezer_id, ["41", "42", "43", "44", "45"])
+    if move_dialog.result != expected_result or captured_mappings[-1] != list(expected_mappings.items()):
+        raise RuntimeError(f"confirmed batch move result order is incorrect: {move_dialog.result}")
+    moved = repository.move_boxes(move_sources, move_dialog.result[0], move_dialog.result[1])
+    if moved != list(expected_mappings.items()) or any(repository.box_has_samples(source) for source in move_sources) or any(not repository.box_has_samples(target) for target in expected_result[1]):
+        raise RuntimeError(f"batch move did not preserve the displayed mappings: {moved}")
 
     outbound_dialog = BatchOutboundDialog(app, 1, "液氮罐 1 / 冻存盒 11/A1")
     app.update_idletasks()

@@ -25,6 +25,7 @@ from liquid_nitrogen_tank_store import (
     InventoryEvent,
     UnitRecord,
     all_unit_codes,
+    parse_unit_code,
 )
 
 
@@ -225,13 +226,46 @@ class ExcelIoTests(unittest.TestCase):
             self.assertEqual(repository.storage_resize_conflicts(5, 5), ["16", "61", "62"])
             with self.assertRaises(ValueError):
                 repository.configure_storage(10, 5)
+            with self.assertRaises(ValueError):
+                repository.configure_storage(6, 21)
+
+    def test_twenty_layer_codes_move_and_shrink_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repository = FreezerRepository(root / "storage.db", root / "missing.json")
+            repository.configure_storage(1, 20)
+            self.assertEqual(repository.storage_capacity, 20)
+            self.assertEqual(len(all_unit_codes(1, 20)), 20)
+            self.assertEqual(parse_unit_code("41"), (4, 1))
+            self.assertEqual(parse_unit_code("410"), (4, 10))
+            self.assertEqual(parse_unit_code("420"), (4, 20))
+            self.assertIsNone(parse_unit_code("421"))
+
+            sample = BoxSample(
+                sample_name="K562", stored_date="2026-08-17", stored_by="Horace"
+            )
+            repository.set_box_sample("12", "A1", sample)
+            repository.set_box_sample("110", "A1", sample)
+            repository.set_box_sample("120", "A1", sample)
+            self.assertEqual(
+                repository.move_boxes(
+                    ["110", "12"], repository.current_freezer_id, ["11", "13"]
+                ),
+                [("12", "11"), ("110", "13")],
+            )
+            self.assertEqual(repository.storage_resize_conflicts(1, 19), ["120"])
+            with self.assertRaisesRegex(ValueError, "120"):
+                repository.configure_storage(1, 19)
+            repository.move_boxes(["120"], repository.current_freezer_id, ["14"])
+            repository.configure_storage(1, 19)
+            self.assertEqual(repository.storage_layers, 19)
 
     def test_excel_import_infers_new_tank_spec_and_rejects_existing_overflow(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             sample = BoxSample(sample_name="CHO-K1", stored_by="Horace")
             workbook = root / "wide-tank.xlsx"
-            export_cryotube_workbook(workbook, [("液氮罐 2", {("76", "A1"): sample}, 81)])
+            export_cryotube_workbook(workbook, [("液氮罐 2", {("420", "A1"): sample}, 81)])
             preview = preview_freezer_workbook(workbook)
             self.assertEqual(preview.error_count, 0)
 
@@ -240,7 +274,7 @@ class ExcelIoTests(unittest.TestCase):
             imported = next(
                 freezer for freezer in repository.freezers.values() if freezer.name == "液氮罐 2"
             )
-            self.assertEqual((imported.storage_columns, imported.storage_layers), (7, 6))
+            self.assertEqual((imported.storage_columns, imported.storage_layers), (4, 20))
 
             repository.switch_freezer(next(
                 freezer_id
