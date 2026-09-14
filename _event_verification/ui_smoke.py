@@ -168,6 +168,16 @@ with TemporaryDirectory() as folder:
         raise RuntimeError("leaving overview batch mode did not clear the visible selection immediately")
     repository.configure_storage(4, 5)
     app.show_box("11")
+    original_zoom = app.box_zoom_level
+    for zoom in (-1, 0, 1, 3):
+        app.box_zoom_level = zoom
+        metrics = app._box_zoom_metrics(repository.get_box_layout("11").columns)
+        cell_font = manager.tkfont.Font(root=app, family="Microsoft YaHei UI", size=metrics["font"], weight="bold")
+        for name in ("RAW264.7", "很长的细胞名称用于检查排版", "WWWWWWWWWWWW", "name\nwith newline"):
+            rendered = str(app._box_button_text("H4", BoxSample(sample_name=name)))
+            if rendered.count("\n") != 1 or cell_font.measure(rendered.split("\n")[1]) > metrics["width"] * cell_font.measure("0"):
+                raise RuntimeError("long cell name does not fit a single name line")
+    app.box_zoom_level = original_zoom
     app.update_idletasks()
     fit_buttons = [
         child
@@ -692,8 +702,22 @@ with TemporaryDirectory() as folder:
     action_filters[0]._close()
     app.reset_inventory_event_filters()
     app.update_idletasks()
+    repository.configure_box("11", 10, 10)
+    app.deiconify()
+    app.geometry("1200x800")
     app.show_box("11")
+    app.update()
+    app.fit_box_grid_to_view("11")
     app.update_idletasks()
+    if app.box_grid_widget.winfo_reqwidth() > app.box_grid_canvas.winfo_width():
+        raise RuntimeError("fit-to-window clips the horizontal row of a 10x10 box")
+    fitted_zoom = app.box_zoom_level
+    app.geometry("1200x600")
+    app.update()
+    app.fit_box_grid_to_view("11")
+    app.update_idletasks()
+    if app.box_zoom_level != fitted_zoom:
+        raise RuntimeError("fit-to-window incorrectly reduces zoom for a shorter window")
     print(
         "ui_smoke_ok",
         f"events={len(repository.inventory_events)}",

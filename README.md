@@ -126,6 +126,7 @@ Excel 兜底迁入不能完整保留：
 - 设置冻存盒布局时，可以只修改当前冻存盒，也可以将同一规格一次性应用到当前液氮罐的全部冻存盒；批量缩小时，只要任一盒内存在超出新布局的细胞，全部修改都会取消。
 - 每个盒内孔位按 1 支冻存管统计。
 - 孔位区域支持缩放、适应窗口和横向或纵向滚动。
+- “适应窗口”按横向宽度选择最大可用缩放档位，尽量完整显示 A1 到最后一列；下方各行通过鼠标滚轮查看，不因窗口高度不足而缩小。底部图例始终独立显示。
 
 ## 界面与交互
 
@@ -134,9 +135,12 @@ Excel 兜底迁入不能完整保留：
 - 总览统计卡片将数量和说明分行显示，避免小窗口下挤在一行。
 - 圆角按钮提供约 100 毫秒的悬停颜色过渡，支持快速移入、移出；切页和执行操作不会等待动画。
 - 侧栏按钮仅使用背景高亮，不显示额外焦点框；其他按钮键盘聚焦时显示高对比边框，输入框聚焦时显示蓝色边框。
-- 冻存盒的放大、缩小、适应窗口和设置布局按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
+- 冻存盒的放大、缩小、适应窗口、设置布局及盒内批量操作按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
 - 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
+- 冻存盒总览的操作按钮不显示焦点蓝框；盒位蓝色描边仅表示已选中，取消选择后恢复原边框。
 - “设置盒子布局”窗口使用等宽的大尺寸取消和确定按钮，便于点击。
+- 布局应用范围采用浅蓝色选中卡片，行列下拉列表使用统一的扁平滚动条。
+- 液氮罐规格的列数、层数下拉列表使用相同配色和扁平滚动条。孔位中的长细胞名按实际文字宽度显示省略号，保持孔位号与名称两行对齐；完整名称可打开孔位查看。
 
 ## 搜索和批量操作
 
@@ -358,6 +362,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - When changing a cryobox layout, apply it either to the current cryobox only or to every cryobox in the current tank. A tank-wide reduction is rejected in full if any cell lies outside the new layout.
 - Each occupied position represents one cryovial.
 - The position grid supports zooming, fit-to-window sizing, and horizontal or vertical scrolling.
+- Fit to Window chooses the largest zoom that fits a complete horizontal row, from A1 to the last column. Lower rows scroll vertically; limited window height does not reduce the zoom. The legend stays outside the scrolling grid.
 
 ## Interface and Interaction
 
@@ -366,8 +371,11 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Overview cards display counts and descriptions on separate lines to prevent crowding in small windows.
 - Rounded buttons use an approximately 100-millisecond hover color transition and support rapid pointer entry and exit. Navigation and actions do not wait for animations.
 - Sidebar buttons use background highlighting without an additional focus outline. Other buttons show a high-contrast border when keyboard-focused, and input fields show a blue focus border.
-- Cryobox zoom, fit-to-window, and layout controls use background highlighting instead of an additional focus outline.
+- Cryobox zoom, fit-to-window, layout, and in-box batch action controls use background highlighting instead of an additional focus outline.
+- Overview actions do not show focus outlines. Blue box borders indicate selection only and disappear when deselected.
 - The cryobox layout dialog uses larger, equally sized Cancel and Confirm buttons.
+- Layout scope uses pale-blue selected cards, and row/column lists use flat scrollbars matching the application.
+- Tank dimension dropdowns use the same colors and flat scrollbars. Long cell names are ellipsized to fit the available width, keeping position and name on two lines; open the position to view the full name.
 
 ## Search and Batch Operations
 

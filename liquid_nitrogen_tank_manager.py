@@ -1296,6 +1296,15 @@ class AppDialog(ui.Toplevel):
         return self.result
 
 
+def _style_dimension_dropdown(picker: ttk.Combobox) -> None:
+    popdown = picker.tk.call("ttk::combobox::PopdownWindow", picker)
+    picker.tk.call(f"{popdown}.f.sb", "configure", "-style", "Flat.Vertical.TScrollbar")
+    picker.tk.call(f"{popdown}.f.l", "configure", "-font", ("Microsoft YaHei UI", 10),
+                   "-background", COLORS["panel"], "-foreground", COLORS["text"],
+                   "-selectbackground", COLORS["primary_soft"], "-selectforeground", COLORS["primary"],
+                   "-selectborderwidth", 0)
+
+
 class BoxLayoutDialog(ui.Toplevel):
     """Row/column picker with a fixed multiplication sign."""
 
@@ -1340,6 +1349,9 @@ class BoxLayoutDialog(ui.Toplevel):
         self.columns_picker = ui.Combobox(column_box, textvariable=self.columns_var, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
         self.columns_picker.pack(fill="x")
 
+        for picker_widget in (self.rows_picker, self.columns_picker):
+            _style_dimension_dropdown(picker_widget)
+
         scope = tk.Frame(body, bg=COLORS["panel"])
         scope.pack(fill="x", pady=(18, 0))
         ui.Label(scope, text=msg('应用范围'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
@@ -1352,15 +1364,22 @@ class BoxLayoutDialog(ui.Toplevel):
                 text=ui.display(self, label),
                 variable=self.scope_var,
                 value=value,
-                bg=COLORS["panel"],
+                bg=COLORS["bg"],
                 fg=COLORS["text"],
-                activebackground=COLORS["panel"],
-                activeforeground=COLORS["text"],
-                selectcolor=COLORS["panel"],
+                activebackground=COLORS["primary_soft"],
+                activeforeground=COLORS["primary"],
+                selectcolor=COLORS["primary_soft"],
+                indicatoron=False,
+                relief="flat",
+                offrelief="flat",
+                overrelief="flat",
+                borderwidth=0,
+                padx=12,
+                pady=9,
                 font=("Microsoft YaHei UI", 9),
                 anchor="w",
                 highlightthickness=0,
-            ).pack(fill="x", anchor="w")
+            ).pack(fill="x", anchor="w", pady=(3, 0))
 
         self.actions = tk.Frame(body, bg=COLORS["panel"])
         self.actions.pack(fill="x", pady=(22, 0))
@@ -1448,6 +1467,7 @@ class StorageSpecDialog(ui.Toplevel):
             ui.Label(field, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
             picker_widget = ui.Combobox(field, textvariable=variable, values=values, state="readonly", style="Picker.TCombobox", font=("Microsoft YaHei UI", 11), justify="center")
             picker_widget.pack(fill="x")
+            _style_dimension_dropdown(picker_widget)
             picker_widget.bind("<<ComboboxSelected>>", self._refresh_preview)
             if grid_column == 0:
                 self.columns_picker = picker_widget
@@ -4732,6 +4752,7 @@ class FreezerManagerApp(tk.Tk):
             title_row,
             text=msg('退出批量') if self.overview_batch_mode else msg('批量处理'),
             command=self.toggle_overview_batch_mode,
+            focus_outline=False,
             fill="#E8EDF4" if self.overview_batch_mode else COLORS["primary_soft"],
             foreground=COLORS["text"] if self.overview_batch_mode else COLORS["primary"],
             hover_fill="#DCE4EE" if self.overview_batch_mode else "#DCE8FF",
@@ -4746,6 +4767,7 @@ class FreezerManagerApp(tk.Tk):
                 title_row,
                 text=msg('调整规格'),
                 command=self.configure_storage_dialog,
+                focus_outline=False,
                 fill=COLORS["primary_soft"],
                 foreground=COLORS["primary"],
                 hover_fill="#DCE8FF",
@@ -4765,10 +4787,10 @@ class FreezerManagerApp(tk.Tk):
             self.overview_batch_status_label = ui.Label(batch_summary, text=msg('已选 {0} 个盒位 · {1} 个有细胞冻存盒', len(self.selected_compartments), len(selected_boxes)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold"))
             self.overview_batch_status_label.pack(anchor="w")
             ui.Label(batch_summary, text=msg('提示：先点击起点，再按住 Shift 点击终点可连续选择'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
-            RoundedButton(batch_panel, text=msg('清空选择'), command=self.clear_overview_batch_selection, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=90, height=34, radius=9).pack(side="right", padx=(0, 14), pady=8)
-            RoundedButton(batch_panel, text=msg('导出选中'), command=self.overview_batch_export, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
-            RoundedButton(batch_panel, text=msg('批量移动'), command=self.overview_batch_move, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", pady=8)
-            RoundedButton(batch_panel, text=msg('批量清空'), command=self.overview_batch_clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=34, radius=9).pack(side="right", padx=6, pady=8)
+            RoundedButton(batch_panel, text=msg('清空选择'), command=self.clear_overview_batch_selection, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=90, height=34, radius=9, focus_outline=False).pack(side="right", padx=(0, 14), pady=8)
+            RoundedButton(batch_panel, text=msg('导出选中'), command=self.overview_batch_export, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9, focus_outline=False).pack(side="right", padx=6, pady=8)
+            RoundedButton(batch_panel, text=msg('批量移动'), command=self.overview_batch_move, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=92, height=34, radius=9, focus_outline=False).pack(side="right", pady=8)
+            RoundedButton(batch_panel, text=msg('批量清空'), command=self.overview_batch_clear, fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=92, height=34, radius=9, focus_outline=False).pack(side="right", padx=6, pady=8)
 
         stats = ttk.Frame(page, style="Page.TFrame")
         stats.grid(row=1 + row_offset, column=0, sticky="ew", pady=(0, 14))
@@ -4890,6 +4912,7 @@ class FreezerManagerApp(tk.Tk):
             width=96 if self.repository.storage_columns > 5 else 118,
             height=56 if self.repository.storage_layers > 5 else 64,
             radius=10,
+            focus_outline=False,
         )
         if self.overview_batch_mode:
             self.overview_compartment_buttons[code] = button
@@ -5430,11 +5453,11 @@ class FreezerManagerApp(tk.Tk):
         self.box_batch_status_label.pack(anchor="w")
         if self.box_batch_mode:
             ui.Label(toolbar_summary, text=msg('提示：先点击起点，再按住 Shift 点击终点可连续选择'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
-            RoundedButton(toolbar, text=msg('全选'), command=lambda: self.select_all_box_positions(code), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=72, height=34, radius=9).pack(side="right", padx=(5, 14), pady=8)
-            RoundedButton(toolbar, text=msg('清空选择'), command=lambda: self.clear_box_selection(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text=msg('清除'), command=lambda: self.batch_clear_box_positions(code), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=78, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text=msg('批量出库'), command=lambda: self.batch_checkout_box_positions(code), fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
-            RoundedButton(toolbar, text=msg('批量入库'), command=lambda: self.batch_edit_box_positions(code), fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=88, height=34, radius=9).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('全选'), command=lambda: self.select_all_box_positions(code), fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=72, height=34, radius=9, focus_outline=False).pack(side="right", padx=(5, 14), pady=8)
+            RoundedButton(toolbar, text=msg('清空选择'), command=lambda: self.clear_box_selection(code), fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=88, height=34, radius=9, focus_outline=False).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('清除'), command=lambda: self.batch_clear_box_positions(code), fill="#FCECEC", foreground=COLORS["danger"], hover_fill="#F7DADA", border="#F3D1D1", canvas_bg=COLORS["panel"], width=78, height=34, radius=9, focus_outline=False).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('批量出库'), command=lambda: self.batch_checkout_box_positions(code), fill="#FFF0DE", foreground="#A85B0B", hover_fill="#FFE1BD", border="#FFE1BD", canvas_bg=COLORS["panel"], width=88, height=34, radius=9, focus_outline=False).pack(side="right", padx=5, pady=8)
+            RoundedButton(toolbar, text=msg('批量入库'), command=lambda: self.batch_edit_box_positions(code), fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=88, height=34, radius=9, focus_outline=False).pack(side="right", padx=5, pady=8)
         else:
             zoom_controls = tk.Frame(toolbar, bg=COLORS["panel"])
             zoom_controls.pack(side="right", padx=(6, 14), pady=7)
@@ -5521,7 +5544,7 @@ class FreezerManagerApp(tk.Tk):
                     cursor="hand2",
                     width=metrics["width"],
                     height=metrics["height"],
-                    wraplength=metrics["wrap"],
+                    wraplength=0,
                     font=("Microsoft YaHei UI", metrics["font"], "bold"),
                 )
                 button.pack(fill="both", expand=True, padx=2, pady=2)
@@ -5777,10 +5800,16 @@ class FreezerManagerApp(tk.Tk):
 
     def _box_button_text(self, position: str, sample: BoxSample | None) -> str:
         if sample and sample.occupied:
-            name = sample.sample_name.strip()
+            name = " ".join(sample.sample_name.split())
             layout = self.repository.get_box_layout(self.current_box_code) if self.current_box_code else None
-            limit = self._box_zoom_metrics(layout.columns)["name_length"] if layout else 7
-            return msg('{0}\n{1}{2}', position, name[:limit], '…' if len(name) > limit else '')
+            metrics = self._box_zoom_metrics(layout.columns if layout else 9)
+            font = tkfont.Font(root=self, family="Microsoft YaHei UI", size=metrics["font"], weight="bold")
+            available = max(1, metrics["width"] * font.measure("0") - 4)
+            if font.measure(name) > available:
+                while name and font.measure(name + "…") > available:
+                    name = name[:-1]
+                name += "…"
+            return msg('{0}\n{1}{2}', position, name, '')
         return position
 
     def _sync_box_grid_scroll_region(self, _event: tk.Event | None = None) -> None:
@@ -5916,7 +5945,7 @@ class FreezerManagerApp(tk.Tk):
         self.box_auto_fit_job = self.after_idle(lambda: self.fit_box_grid_to_view(code))
 
     def fit_box_grid_to_view(self, code: str, attempt: int = 0) -> None:
-        """Choose the largest zoom that fits the current grid viewport."""
+        """Fit one complete horizontal row; remaining rows scroll vertically."""
         self.box_auto_fit_job = None
         if not self.box_page_visible or self.current_box_code != code:
             return
@@ -5943,19 +5972,14 @@ class FreezerManagerApp(tk.Tk):
                     grid.winfo_reqheight(),
                 )
 
-        # A small vertical overflow is preferable to leaving a large unused
-        # area. This typically keeps a full-screen 9x9 box at 160% while still
-        # rejecting the next level when it would require substantial scrolling.
-        height_tolerance = max(18, min(72, available_height // 10))
+        # Reserve space for the vertical scrollbar even when it is currently hidden.
+        available_width = self.box_grid_canvas.master.winfo_width() - 19
         chosen_level = -1
         for level in range(5, -2, -1):
-            required_width, required_height = self.box_zoom_size_cache[
+            required_width, _required_height = self.box_zoom_size_cache[
                 (layout.rows, layout.columns, level)
             ]
-            if (
-                required_width <= available_width - 4
-                and required_height <= available_height + height_tolerance
-            ):
+            if required_width <= available_width:
                 chosen_level = level
                 break
         self.box_zoom_level = chosen_level
@@ -5979,7 +6003,7 @@ class FreezerManagerApp(tk.Tk):
                 button.configure(
                     width=metrics["width"],
                     height=metrics["height"],
-                    wraplength=metrics["wrap"],
+                    wraplength=0,
                     font=("Microsoft YaHei UI", metrics["font"], "bold"),
                     text=self._box_button_text(position, sample),
                 )
