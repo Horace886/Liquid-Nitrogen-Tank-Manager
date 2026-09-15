@@ -1575,7 +1575,7 @@ class InventoryLocationsDialog(ui.Toplevel):
                 body,
                 bg=card_bg,
                 highlightthickness=2 if opened else 1,
-                highlightbackground=COLORS["primary"] if opened else COLORS["line"],
+                highlightbackground=COLORS["primary"] if opened else COLORS["line"], highlightcolor=COLORS["primary"] if opened else COLORS["line"],
             )
             card.pack(fill="x", padx=18, pady=(14, 0))
             info = tk.Frame(card, bg=card_bg)
@@ -1593,7 +1593,7 @@ class InventoryLocationsDialog(ui.Toplevel):
                     padx=9,
                     pady=1,
                     highlightthickness=1,
-                    highlightbackground="#BFD4FF",
+                    highlightbackground="#BFD4FF", highlightcolor="#BFD4FF",
                 ).pack(side="left", padx=10)
             ui.Label(info, text=msg('盒位 {0}  ·  孔位：{1}', code, compact_box_positions(location['positions'])), bg=card_bg, fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), anchor="w").pack(fill="x", pady=(5, 0))
             ui.Label(info, text=msg('该盒共 {0} 支冻存管  ·  占用 {1} 个孔位', len(location['positions']), len(location['positions'])), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w").pack(fill="x", pady=(5, 0))
@@ -1669,7 +1669,7 @@ class BoxMoveConfirmDialog(ui.Toplevel):
         ui.Label(intro, text=msg('目标液氮罐：{0}', target_name), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w")
         ui.Label(intro, text=msg('请核对以下 {0} 个冻存盒的移动对应关系。确认后将创建备份并执行移动。', len(mappings)), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8), wraplength=500, justify="left").pack(anchor="w", pady=(4, 0))
 
-        list_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        list_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         list_panel.pack(fill="both", expand=True, padx=22, pady=(0, 12))
         headings = tk.Frame(list_panel, bg="#F4F7FB")
         headings.pack(fill="x")
@@ -1760,7 +1760,7 @@ class BoxMoveDialog(ui.Toplevel):
         ui.Label(header_text, text=msg('选择移动目标'), bg=COLORS["sidebar"], fg="white", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w")
         ui.Label(header_text, text=msg('源冻存盒：{0}', join_text('、', self.source_codes)), bg=COLORS["sidebar"], fg=COLORS["sidebar_muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(2, 0))
 
-        controls = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        controls = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         controls.pack(fill="x", padx=20, pady=(18, 12))
         ui.Label(controls, text=msg('目标液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(18, 10), pady=13)
         self.freezer_var = tk.StringVar(value=self.repository.freezer_name)
@@ -1770,7 +1770,7 @@ class BoxMoveDialog(ui.Toplevel):
         self.selection_label = ui.Label(controls, text="", bg=COLORS["panel"], fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold"))
         self.selection_label.pack(side="right", padx=18)
 
-        grid_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        grid_panel = tk.Frame(self, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         grid_panel.pack(fill="both", expand=True, padx=20, pady=(0, 12))
         grid_head = tk.Frame(grid_panel, bg=COLORS["panel"])
         grid_head.pack(fill="x", padx=18, pady=(13, 7))
@@ -1852,7 +1852,7 @@ class BoxMoveDialog(ui.Toplevel):
                     self.target_buttons[code] = button
                     button.grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
                 else:
-                    ui.Label(self.grid, text=msg('{0}\n已占用', code), bg="#EEF2F7", fg="#A0A9B7", font=("Microsoft YaHei UI", 9, "bold"), highlightthickness=1, highlightbackground=COLORS["line"], padx=8, pady=10).grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
+                    ui.Label(self.grid, text=msg('{0}\n已占用', code), bg="#EEF2F7", fg="#A0A9B7", font=("Microsoft YaHei UI", 9, "bold"), highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"], padx=8, pady=10).grid(row=layer, column=column, sticky="nsew", padx=6, pady=5)
         self._refresh_selection_status()
 
     def _toggle_target(self, code: str) -> None:
@@ -2067,7 +2067,7 @@ class MultiSelectDropdown(tk.Frame):
             root,
             bg=COLORS["panel"],
             highlightthickness=1,
-            highlightbackground=COLORS["line"],
+            highlightbackground=COLORS["line"], highlightcolor=COLORS["line"],
         )
         self.panel = body
         ui.Label(
@@ -2212,7 +2212,7 @@ class DatePickerField(tk.Frame):
             root,
             bg=COLORS["panel"],
             highlightthickness=1,
-            highlightbackground=COLORS["line"],
+            highlightbackground=COLORS["line"], highlightcolor=COLORS["line"],
         )
         panel.withdraw()
         panel.overrideredirect(True)
@@ -3267,7 +3267,7 @@ class FreezerManagerApp(tk.Tk):
             lambda _event: self.brand_version_label.configure(fg=COLORS["sidebar_muted"]),
         )
 
-        freezer_panel = tk.Frame(sidebar, bg="#0E1E31", highlightthickness=1, highlightbackground="#294766")
+        freezer_panel = tk.Frame(sidebar, bg="#0E1E31", highlightthickness=1, highlightbackground="#294766", highlightcolor="#294766")
         freezer_panel.pack(fill="x", padx=15, pady=(0, 7))
         ui.Label(freezer_panel, text=msg('当前液氮罐'), fg=COLORS["sidebar_muted"], bg="#0E1E31", font=("Microsoft YaHei UI", 8), anchor="w").pack(fill="x", padx=12, pady=(8, 4))
         self.freezer_selector_var = tk.StringVar()
@@ -3340,7 +3340,7 @@ class FreezerManagerApp(tk.Tk):
             "backup": self._sidebar_button(navigation, msg('◷   备份与恢复'), self.show_backup_page),
         }
 
-        summary = tk.Frame(sidebar, bg="#0E1E31", height=96, highlightthickness=1, highlightbackground="#203A58")
+        summary = tk.Frame(sidebar, bg="#0E1E31", height=96, highlightthickness=1, highlightbackground="#203A58", highlightcolor="#203A58")
         # Insert the bottom card before the workbench/nav items in the pack
         # order so it reserves its full height instead of receiving only the
         # clipped remainder on shorter screens.
@@ -3364,7 +3364,7 @@ class FreezerManagerApp(tk.Tk):
 
         main = tk.Frame(shell, bg=COLORS["bg"])
         main.pack(side="left", fill="both", expand=True)
-        header = tk.Frame(main, bg=COLORS["panel"], height=72, highlightthickness=1, highlightbackground=COLORS["line"])
+        header = tk.Frame(main, bg=COLORS["panel"], height=72, highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         header.pack(fill="x")
         header.pack_propagate(False)
         ui.Label(header, textvariable=self.page_title_var, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 14, "bold")).pack(side="left", padx=28)
@@ -3809,7 +3809,7 @@ class FreezerManagerApp(tk.Tk):
                 list_panel,
                 bg=card_bg,
                 highlightthickness=2 if opened else 0,
-                highlightbackground=COLORS["primary"],
+                highlightbackground=COLORS["primary"], highlightcolor=COLORS["primary"],
             )
             card.pack(fill="x", padx=18, pady=(13 if index == 0 else 0, 13))
             rank = ui.Label(card, text=msg('推荐') if index == 0 else str(index + 1), width=13, bg=COLORS["occupied"] if index == 0 else "#F4F7FB", fg=COLORS["occupied_text"] if index == 0 else COLORS["muted"], font=("Microsoft YaHei UI", 8, "bold"), padx=6, pady=8)
@@ -3829,7 +3829,7 @@ class FreezerManagerApp(tk.Tk):
                     padx=9,
                     pady=1,
                     highlightthickness=1,
-                    highlightbackground="#BFD4FF",
+                    highlightbackground="#BFD4FF", highlightcolor="#BFD4FF",
                 ).pack(side="left", padx=10)
             positions = list(item["recommended_positions"])
             ui.Label(detail, text=msg('推荐孔位：{0}', compact_box_positions(positions)), bg=card_bg, fg=COLORS["primary"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
@@ -4440,7 +4440,7 @@ class FreezerManagerApp(tk.Tk):
         code = str(result["code"])
         positions = [str(value) for value in result["positions"]]
         samples: list[BoxSample] = list(result["samples"])
-        card = tk.Frame(parent, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        card = tk.Frame(parent, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         card.pack(fill="x", padx=18, pady=7)
         card.columnconfigure(1, weight=1)
         ui.Checkbutton(card, variable=self.result_selection[code], bg=COLORS["panel"], activebackground=COLORS["panel"], highlightthickness=0).grid(row=0, column=0, sticky="w", padx=(12, 4), pady=16)
@@ -4502,7 +4502,7 @@ class FreezerManagerApp(tk.Tk):
             parent,
             bg=card_bg,
             highlightthickness=2 if opened else 1,
-            highlightbackground=COLORS["primary"] if opened else COLORS["line"],
+            highlightbackground=COLORS["primary"] if opened else COLORS["line"], highlightcolor=COLORS["primary"] if opened else COLORS["line"],
         )
         card.pack(fill="x", padx=18, pady=7)
         RoundedButton(card, text=msg('再次打开') if opened else msg('打开盒子'), command=lambda values=tuple(str(position) for position in positions): self.open_inventory_location(freezer_id, code, values, return_mode="basic"), fill="#DCE8FF" if opened else COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#CFE0FF", border="#DCE8FF" if opened else COLORS["primary_soft"], canvas_bg=card_bg, width=92, height=34, radius=9, font=("Microsoft YaHei UI", 8)).pack(side="right", padx=16, pady=16)
@@ -4521,7 +4521,7 @@ class FreezerManagerApp(tk.Tk):
                 padx=9,
                 pady=1,
                 highlightthickness=1,
-                highlightbackground="#BFD4FF",
+                highlightbackground="#BFD4FF", highlightcolor="#BFD4FF",
             ).pack(side="left", padx=10)
         match_label = ui.Label(detail, text=msg('匹配孔位 {0}  ·  {1} 支冻存管', compact_box_positions(positions), len(positions)), bg=card_bg, fg=COLORS["occupied_text"], font=("Microsoft YaHei UI", 9, "bold"), anchor="w", justify="left", wraplength=400)
         match_label.pack(fill="x", pady=(4, 0))
@@ -4720,7 +4720,7 @@ class FreezerManagerApp(tk.Tk):
 
     @staticmethod
     def _panel(parent: tk.Misc, **grid_options: object) -> tk.Frame:
-        panel = tk.Frame(parent, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"])
+        panel = tk.Frame(parent, bg=COLORS["panel"], highlightthickness=1, highlightbackground=COLORS["line"], highlightcolor=COLORS["line"])
         if grid_options:
             panel.grid(**grid_options)
         return panel
@@ -5173,7 +5173,7 @@ class FreezerManagerApp(tk.Tk):
         for depth in range(1, 2):
             ucode = unit_code(column, layer)
             record = self.repository.get(ucode)
-            card = tk.Frame(unit_area, bg=COLORS["panel"], highlightthickness=1, highlightbackground="#BFE4D2" if box_sample_count else COLORS["line"])
+            card = tk.Frame(unit_area, bg=COLORS["panel"], highlightthickness=1, highlightbackground="#BFE4D2" if box_sample_count else COLORS["line"], highlightcolor="#BFE4D2" if box_sample_count else COLORS["line"])
             card.grid(row=0, column=0, sticky="nsew")
             tk.Frame(card, height=6, bg=COLORS["occupied_text"] if box_sample_count else COLORS["line"]).pack(fill="x")
             inside = tk.Frame(card, bg=COLORS["panel"])
@@ -5253,7 +5253,7 @@ class FreezerManagerApp(tk.Tk):
         record = self.repository.get(code)
         card.configure(
             highlightthickness=2 if selected else 1,
-            highlightbackground=COLORS["primary"] if selected else ("#BFE4D2" if record.occupied else COLORS["line"]),
+            highlightbackground=COLORS["primary"] if selected else ("#BFE4D2" if record.occupied else COLORS["line"]), highlightcolor=COLORS["primary"] if selected else ("#BFE4D2" if record.occupied else COLORS["line"]),
         )
         button.set_text(msg('取消选择') if selected else msg('选择冻存盒'))
         button.set_palette(
@@ -5479,7 +5479,7 @@ class FreezerManagerApp(tk.Tk):
         for label, color in ((msg('空孔'), "#EEF2F7"), (msg('已有细胞'), COLORS["occupied"]), (msg('查找命中'), "#FFD166"), (msg('可移动目标'), "#DCE8FF"), (msg('已选择'), COLORS["primary"])):
             selected_legend = color == COLORS["primary"]
             legend_bg = COLORS["panel"] if selected_legend else color
-            ui.Label(legend, text=msg('  {0}  ', label), bg=legend_bg, fg=COLORS["primary"] if selected_legend else COLORS["text"], font=("Microsoft YaHei UI", 8), highlightthickness=2, highlightbackground=COLORS["primary"] if selected_legend else legend_bg).pack(side="left", padx=(0, 8), pady=8)
+            ui.Label(legend, text=msg('  {0}  ', label), bg=legend_bg, fg=COLORS["primary"] if selected_legend else COLORS["text"], font=("Microsoft YaHei UI", 8), highlightthickness=2, highlightbackground=COLORS["primary"] if selected_legend else legend_bg, highlightcolor=COLORS["primary"] if selected_legend else legend_bg).pack(side="left", padx=(0, 8), pady=8)
         self.box_move_undo_button = None
         if self.box_quick_move_mode:
             self.box_move_undo_button = RoundedButton(

@@ -138,6 +138,7 @@ Excel 兜底迁入不能完整保留：
 - 冻存盒的放大、缩小、适应窗口、设置布局及盒内批量操作按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
 - 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
 - 冻存盒总览的操作按钮不显示焦点蓝框；盒位蓝色描边仅表示已选中，取消选择后恢复原边框。
+- 所有面板、结果卡片及日历和筛选弹层获得焦点后保持原边框颜色，不再出现默认黑框。
 - “设置盒子布局”窗口使用等宽的大尺寸取消和确定按钮，便于点击。
 - 布局应用范围采用浅蓝色选中卡片，行列下拉列表使用统一的扁平滚动条。
 - 液氮罐规格的列数、层数下拉列表使用相同配色和扁平滚动条。孔位中的长细胞名按实际文字宽度显示省略号，保持孔位号与名称两行对齐；完整名称可打开孔位查看。
@@ -375,6 +376,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Rounded action buttons throughout the application and register filter buttons use background highlighting for focus without leaving a blue focus border after cancellation. Input focus indicators and borders marking actual selections are preserved.
 - Cryobox zoom, fit-to-window, layout, and in-box batch action controls use background highlighting instead of an additional focus outline.
 - Overview actions do not show focus outlines. Blue box borders indicate selection only and disappear when deselected.
+- Panels, result cards, calendar popups and filter popups retain their border colors on focus without a default black outline.
 - The cryobox layout dialog uses larger, equally sized Cancel and Confirm buttons.
 - Layout scope uses pale-blue selected cards, and row/column lists use flat scrollbars matching the application.
 - Tank dimension dropdowns use the same colors and flat scrollbars. Long cell names are ellipsized to fit the available width, keeping position and name on two lines; open the position to view the full name.
