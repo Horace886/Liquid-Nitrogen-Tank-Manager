@@ -134,7 +134,7 @@ Excel 兜底迁入不能完整保留：
 - 窗口较矮时工作台导航可滚动，键盘聚焦会自动显示对应按钮；底部容量信息保持固定。
 - 总览统计卡片将数量和说明分行显示，避免小窗口下挤在一行。
 - 圆角按钮提供约 100 毫秒的悬停颜色过渡，支持快速移入、移出；切页和执行操作不会等待动画。
-- 侧栏按钮仅使用背景高亮，不显示额外焦点框；其他按钮键盘聚焦时显示高对比边框，输入框聚焦时显示蓝色边框。
+- 所有功能区的圆角操作按钮及登记筛选按钮统一使用背景高亮表示焦点，取消操作后不残留焦点蓝框；输入框编辑提示与实际选中项目的蓝色描边保留。
 - 冻存盒的放大、缩小、适应窗口、设置布局及盒内批量操作按钮不显示额外焦点框，键盘聚焦时以背景高亮提示。
 - 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
 - 冻存盒总览的操作按钮不显示焦点蓝框；盒位蓝色描边仅表示已选中，取消选择后恢复原边框。
@@ -143,6 +143,8 @@ Excel 兜底迁入不能完整保留：
 - 液氮罐规格的列数、层数下拉列表使用相同配色和扁平滚动条。孔位中的长细胞名按实际文字宽度显示省略号，保持孔位号与名称两行对齐；完整名称可打开孔位查看。
 
 ## 搜索和批量操作
+
+出入库登记页保留统一的标题和说明样式，采用紧凑统计卡片和两行筛选区域；导出按钮位于登记表标题栏右侧，记录表随窗口填充剩余高度。
 
 普通“查找细胞”会搜索全部未归档液氮罐，并显示液氮罐、冻存盒和孔位。打开其他液氮罐中的结果时，程序会自动切换并高亮对应孔位。较长的匹配孔位和细胞清单会在结果卡片内自动换行，右侧“打开盒子”按钮始终保留可见。
 
@@ -370,7 +372,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - In shorter windows, the navigation area scrolls and automatically brings keyboard-focused buttons into view. Capacity information remains fixed at the bottom.
 - Overview cards display counts and descriptions on separate lines to prevent crowding in small windows.
 - Rounded buttons use an approximately 100-millisecond hover color transition and support rapid pointer entry and exit. Navigation and actions do not wait for animations.
-- Sidebar buttons use background highlighting without an additional focus outline. Other buttons show a high-contrast border when keyboard-focused, and input fields show a blue focus border.
+- Rounded action buttons throughout the application and register filter buttons use background highlighting for focus without leaving a blue focus border after cancellation. Input focus indicators and borders marking actual selections are preserved.
 - Cryobox zoom, fit-to-window, layout, and in-box batch action controls use background highlighting instead of an additional focus outline.
 - Overview actions do not show focus outlines. Blue box borders indicate selection only and disappear when deselected.
 - The cryobox layout dialog uses larger, equally sized Cancel and Confirm buttons.
@@ -378,6 +380,8 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Tank dimension dropdowns use the same colors and flat scrollbars. Long cell names are ellipsized to fit the available width, keeping position and name on two lines; open the position to view the full name.
 
 ## Search and Batch Operations
+
+The event register keeps the standard page title and description, with compact summary cards and two filter rows. Export is on the right of the table header; the record table fills the remaining window height.
 
 The standard cell search (查找细胞) searches all non-archived tanks and displays the tank, box, and position for each result. Opening a result from another tank automatically switches to that tank and highlights the matching positions. Long position and cell lists wrap within each result card so the Open Box button remains visible.
 

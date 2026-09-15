@@ -977,7 +977,7 @@ class RoundedButton(tk.Canvas):
         radius: int = 9,
         anchor: str = "center",
         text_padx: int = 14,
-        focus_outline: bool = True,
+        focus_outline: bool = False,
     ):
         self._font = tkfont.Font(font=font)
         if width is None:
@@ -1076,7 +1076,7 @@ class RoundedButton(tk.Canvas):
         )
 
     def _surface_fill(self) -> str:
-        # Sidebar keyboard focus uses a background highlight, not an outline.
+        # Keyboard focus uses a background highlight without an extra border.
         if not self._focus_outline and self.focus_get() is self:
             return self._hover_fill
         return self._fill
@@ -3133,8 +3133,8 @@ class FreezerManagerApp(tk.Tk):
         )
         style.map(
             "EventFilter.TButton",
-            background=[("active", COLORS["primary_soft"]), ("pressed", COLORS["primary_soft"])],
-            bordercolor=[("focus", COLORS["primary"])],
+            background=[("active", COLORS["primary_soft"]), ("pressed", COLORS["primary_soft"]), ("focus", COLORS["primary_soft"])],
+            bordercolor=[("focus", COLORS["line"])],
         )
         style.configure(
             "Picker.TCombobox",
@@ -4064,7 +4064,7 @@ class FreezerManagerApp(tk.Tk):
         }
         all_event_count = sum(action_totals.values())
         cards = tk.Frame(page, bg=COLORS["bg"])
-        cards.pack(fill="x", pady=(0, 14))
+        cards.pack(fill="x", pady=(0, 10))
         for index, (label, value, color) in enumerate((
             (msg('全部登记'), all_event_count, COLORS["primary"]),
             (msg('入库'), action_counts["IN"], COLORS["occupied_text"]),
@@ -4074,13 +4074,13 @@ class FreezerManagerApp(tk.Tk):
             cards.columnconfigure(index, weight=1)
             card = self._panel(cards)
             card.grid(row=0, column=index, sticky="ew", padx=(0 if index == 0 else 8, 0))
-            ui.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=15, pady=(12, 2))
-            ui.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 17, "bold")).pack(anchor="w", padx=15, pady=(0, 12))
+            ui.Label(card, text=label, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(12, 6), pady=10)
+            ui.Label(card, text=str(value), bg=COLORS["panel"], fg=color, font=("Microsoft YaHei UI", 17, "bold")).pack(side="right", padx=(0, 12), pady=8)
 
         filter_panel = self._panel(page)
-        filter_panel.pack(fill="x", pady=(0, 14))
+        filter_panel.pack(fill="x", pady=(0, 10))
         form = tk.Frame(filter_panel, bg=COLORS["panel"])
-        form.pack(fill="x", padx=18, pady=16)
+        form.pack(fill="x", padx=14, pady=10)
         # Two rows leave room for English labels and calendar controls even
         # at the minimum window width, without rebuilding on language change.
         for column in range(3):
@@ -4096,7 +4096,7 @@ class FreezerManagerApp(tk.Tk):
         )
         for column, (label, variable, hint, options) in enumerate(fields):
             cell = tk.Frame(form, bg=COLORS["panel"])
-            cell.grid(row=column // 3, column=column % 3, sticky="new", padx=5, pady=(0, 8))
+            cell.grid(row=column // 3, column=column % 3, sticky="new", padx=5, pady=(0, 4))
             ui.Label(cell, text=label, bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
             if column == 1:
                 MultiSelectDropdown(
@@ -4123,11 +4123,13 @@ class FreezerManagerApp(tk.Tk):
                 ui.Combobox(cell, textvariable=variable, values=options, state="readonly", font=("Microsoft YaHei UI", 9)).pack(fill="x")
             if hint:
                 ui.Label(cell, text=hint, bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 7)).pack(anchor="w", pady=(3, 0))
-        actions = tk.Frame(filter_panel, bg=COLORS["panel"])
-        actions.pack(fill="x", padx=18, pady=(0, 14))
+        action_cell = tk.Frame(form, bg=COLORS["panel"])
+        action_cell.grid(row=1, column=2, sticky="new", padx=5)
+        ui.Label(action_cell, text="", bg=COLORS["panel"], font=("Microsoft YaHei UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+        actions = tk.Frame(action_cell, bg=COLORS["panel"])
+        actions.pack(fill="x")
         RoundedButton(actions, text=msg('应用筛选'), command=self.show_inventory_events_page, fill=COLORS["primary"], hover_fill=COLORS["primary_dark"], canvas_bg=COLORS["panel"], width=100, height=36, radius=9).pack(side="left")
         RoundedButton(actions, text=msg('重置'), command=self.reset_inventory_event_filters, fill="#E8EDF4", foreground=COLORS["text"], hover_fill="#DCE4EE", border="#E8EDF4", canvas_bg=COLORS["panel"], width=82, height=36, radius=9).pack(side="left", padx=8)
-        RoundedButton(actions, text=msg('导出出入库'), command=self.export_inventory_events_to_excel, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=108, height=36, radius=9).pack(side="right")
 
         selected_freezer_id = next((freezer_id for freezer_id, name in self.repository.list_freezers(include_archived=True) if name == self.event_freezer_var.get()), "")
         event_filter = {
@@ -4146,7 +4148,8 @@ class FreezerManagerApp(tk.Tk):
         list_panel = self._panel(page)
         list_panel.pack(fill="both", expand=True, pady=(0, 4))
         list_header = tk.Frame(list_panel, bg=COLORS["panel"])
-        list_header.pack(fill="x", padx=16, pady=(12, 9))
+        list_header.pack(fill="x", padx=16, pady=(8, 8))
+        RoundedButton(list_header, text=msg('导出出入库'), command=self.export_inventory_events_to_excel, fill=COLORS["primary_soft"], foreground=COLORS["primary"], hover_fill="#DCE8FF", border=COLORS["primary_soft"], canvas_bg=COLORS["panel"], width=108, height=34, radius=9).pack(side="right", padx=(12, 0))
         ui.Label(list_header, text=msg('登记记录 · {0} 条', event_count), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         if event_count > 300:
             ui.Label(list_header, text=msg('当前显示最近 300 条，请使用筛选缩小范围'), bg=COLORS["panel"], fg="#B56A00", font=("Microsoft YaHei UI", 8)).pack(side="right")
