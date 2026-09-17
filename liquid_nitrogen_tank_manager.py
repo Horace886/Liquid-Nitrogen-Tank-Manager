@@ -5966,14 +5966,35 @@ class FreezerManagerApp(tk.Tk):
         layout = self.repository.get_box_layout(code)
         cache_keys = [(layout.rows, layout.columns, level) for level in range(-1, 6)]
         if any(key not in self.box_zoom_size_cache for key in cache_keys):
-            for level, cache_key in zip(range(-1, 6), cache_keys):
-                self.box_zoom_level = level
-                self._apply_box_grid_zoom(code)
-                grid.update_idletasks()
-                self.box_zoom_size_cache[cache_key] = (
-                    grid.winfo_reqwidth(),
-                    grid.winfo_reqheight(),
-                )
+            # Measure one off-screen cell per zoom, not the entire live box.
+            probe_host = tk.Frame(self)
+            original_level = self.box_zoom_level
+            probes = []
+            try:
+                for level, cache_key in zip(range(-1, 6), cache_keys):
+                    self.box_zoom_level = level
+                    metrics = self._box_zoom_metrics(layout.columns)
+                    column = tk.Label(probe_host, text="1", width=metrics["width"],
+                                      font=("Microsoft YaHei UI", metrics["label_font"], "bold"))
+                    row = tk.Label(probe_host, text="A", width=3,
+                                   font=("Microsoft YaHei UI", metrics["label_font"], "bold"))
+                    cell = tk.Button(probe_host, text="A1\nCell", relief="flat", borderwidth=0,
+                                     highlightthickness=0, width=metrics["width"], height=metrics["height"],
+                                     wraplength=0, font=("Microsoft YaHei UI", metrics["font"], "bold"))
+                    probes.append((cache_key, column, row, cell))
+                probe_host.update_idletasks()
+                corner_width = grid.grid_slaves(row=0, column=0)[0].winfo_reqwidth()
+                for cache_key, column, row, cell in probes:
+                    # Match the live grid's 3px cell margins and 2px button padding.
+                    self.box_zoom_size_cache[cache_key] = (
+                        max(corner_width, row.winfo_reqwidth() + 5)
+                        + layout.columns * max(column.winfo_reqwidth(), cell.winfo_reqwidth() + 10),
+                        column.winfo_reqheight() + 5
+                        + layout.rows * max(row.winfo_reqheight(), cell.winfo_reqheight() + 10),
+                    )
+            finally:
+                self.box_zoom_level = original_level
+                probe_host.destroy()
 
         # Reserve space for the vertical scrollbar even when it is currently hidden.
         available_width = self.box_grid_canvas.master.winfo_width() - 19

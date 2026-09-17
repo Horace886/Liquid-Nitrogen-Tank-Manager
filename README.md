@@ -127,6 +127,7 @@ Excel 兜底迁入不能完整保留：
 - 每个盒内孔位按 1 支冻存管统计。
 - 孔位区域支持缩放、适应窗口和横向或纵向滚动。
 - “适应窗口”按横向宽度选择最大可用缩放档位，尽量完整显示 A1 到最后一列；下方各行通过鼠标滚轮查看，不因窗口高度不足而缩小。底部图例始终独立显示。
+- 首次打开冻存盒时，通过屏幕外的单格控件测量缩放尺寸，避免为计算适应窗口而反复刷新整盒孔位。
 
 ## 界面与交互
 
@@ -213,6 +214,14 @@ py -3 _event_verification/ui_polish_smoke.py
 ```
 
 添加 `--preview` 可打开 5 分钟的演示窗口，添加 `--compact` 可检查 1000×620 小窗口布局。
+
+冻存盒打开性能诊断：
+
+```powershell
+py -3 _event_verification/box_open_diagnostic.py
+```
+
+该脚本使用临时数据库对比首次与再次打开冻存盒的耗时，并验证不同盒子规格和缩放档位的网格尺寸。仅供开发排查，不会随软件启动，也不会修改实际库存。
 
 ## 稳定性与数据安全免责声明
 
@@ -366,6 +375,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Each occupied position represents one cryovial.
 - The position grid supports zooming, fit-to-window sizing, and horizontal or vertical scrolling.
 - Fit to Window chooses the largest zoom that fits a complete horizontal row, from A1 to the last column. Lower rows scroll vertically; limited window height does not reduce the zoom. The legend stays outside the scrolling grid.
+- First-time sizing measures off-screen sample cells instead of repeatedly resizing the entire live grid.
 
 ## Interface and Interaction
 
@@ -447,6 +457,14 @@ py -3 _event_verification/ui_polish_smoke.py
 ```
 
 Add `--preview` to keep a demonstration window open for five minutes. Combine it with `--compact` to inspect the 1000×620 compact layout.
+
+To diagnose cryobox opening performance:
+
+```powershell
+py -3 _event_verification/box_open_diagnostic.py
+```
+
+This script uses a temporary database to compare first and subsequent cryobox opening times and verify grid dimensions across box sizes and zoom levels. It is for development diagnostics only, does not run when the application starts, and does not modify real inventory.
 
 ## Stability and Data Safety Disclaimer
 
