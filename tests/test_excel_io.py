@@ -30,6 +30,52 @@ from liquid_nitrogen_tank_store import (
 
 
 class ExcelIoTests(unittest.TestCase):
+    def test_import_uniform_layout_covers_empty_boxes_and_rolls_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            repo = FreezerRepository(root / "test.db", root / "missing.json")
+            sample = BoxSample(sample_name="Test", stored_by="Tester", stored_date="2026-09-18").as_dict()
+            imported = [("Tank A", {"11/J10": sample, "12/A1": sample}), ("Tank B", {"11/A1": sample})]
+            repo.import_freezers(imported, overwrite=True, uniform_layouts={"Tank A": (10, 10), "Tank B": (8, 8)})
+            ids = {freezer.name: key for key, freezer in repo.freezers.items()}
+            for name, dimensions in (("Tank A", (10, 10)), ("Tank B", (8, 8))):
+                for code in all_unit_codes():
+                    layout = repo.get_box_layout(code, ids[name])
+                    self.assertEqual((layout.rows, layout.columns), dimensions)
+            self.assertTrue(repo.last_import_backup.exists())
+            # A merge must also validate retained inventory, not just incoming cells.
+            with self.assertRaisesRegex(ValueError, "11/J10"):
+                repo.import_freezers([("Tank B", {"12/A1": sample}), ("Tank A", {"13/A1": sample})],
+                                     overwrite=False, uniform_layouts={"Tank B": (12, 12), "Tank A": (9, 9)})
+            reloaded = FreezerRepository(root / "test.db", root / "missing.json")
+            self.assertEqual(reloaded.get_box_layout("45", ids["Tank B"]).rows, 8)
+            self.assertNotIn((ids["Tank B"], "12", "A1"), reloaded.box_samples)
+            self.assertIn((ids["Tank A"], "11", "J10"), reloaded.box_samples)
+            # Overwrite may shrink when the old out-of-range inventory is removed.
+            repo.import_freezers([("Tank A", {"11/A1": sample})], overwrite=True,
+                                 uniform_layouts={"Tank A": (9, 9)})
+            self.assertEqual(repo.get_box_layout("45", ids["Tank A"]).rows, 9)
+
+    def test_export_column_and_layer_for_all_supported_box_codes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            codes = all_unit_codes(9, 20)
+            sample = BoxSample(sample_name="Test", stored_by="Tester", stored_date="2026-09-18")
+            samples = {(code, "A1"): sample for code in reversed(codes)}
+            for language in ("zh", "en"):
+                output = Path(folder) / f"positions-{language}.xlsx"
+                export_cryotube_workbook(output, [("Tank", samples, 14580)], language=language)
+                with zipfile.ZipFile(output) as book:
+                    rows = excel._sheet_rows(book, "xl/worksheets/sheet2.xml", excel._shared_strings(book))[1:]
+                expected = sorted(codes, key=parse_unit_code)
+                self.assertEqual([row[0] for row in rows], expected)
+                for row, code in zip(rows, expected):
+                    column, layer = parse_unit_code(code)
+                    self.assertEqual((int(row[1]), int(row[2])), (column, layer))
+                    self.assertEqual(row[4], f"{code}/A1")
+                preview = preview_freezer_workbook(output)
+                self.assertTrue(preview.can_import, preview.issues)
+                self.assertEqual(preview.record_count, len(codes))
+
     def test_bilingual_inventory_roundtrip_preserves_user_values_and_tank_names(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

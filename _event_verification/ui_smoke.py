@@ -718,6 +718,37 @@ with TemporaryDirectory() as folder:
     app.update_idletasks()
     if app.box_zoom_level != fitted_zoom:
         raise RuntimeError("fit-to-window incorrectly reduces zoom for a shorter window")
+    from liquid_nitrogen_tank_excel import ImportPreview
+    app.pending_import_path = root / "preview-only.xlsx"
+    app.pending_import_preview = ImportPreview(
+        [("Import Tank", {"11/J10": BoxSample(sample_name="Test", stored_by="Tester").as_dict()}),
+         ("Other Tank", {"11/A1": BoxSample(sample_name="Test", stored_by="Tester").as_dict()})], [])
+    app.show_import_preview()
+    app.update()
+    enabled, rows, columns = app.import_layout_vars["Import Tank"]
+    if not enabled.get() or (rows.get(), columns.get()) != ("10", "10"):
+        raise RuntimeError("import preview did not suggest a uniform 10x10 layout for J10")
+    if tuple(v.get() for v in app.import_layout_vars["Other Tank"][1:]) != ("9", "9"):
+        raise RuntimeError("import preview mixed layout suggestions between tanks")
+    import_scroll = next(child for child in descendants(app.content) if isinstance(child, manager.ScrollableFrame))
+    import_picker = next(child for child in descendants(app.content) if isinstance(child, manager.ui.Combobox))
+    app.tk.call("ttk::combobox::Post", import_picker)
+    app.update()
+    before_scroll = import_scroll.canvas.yview()
+    wheel = tk.Event()
+    wheel.widget = import_picker
+    wheel.delta = -120
+    wheel.state = 0
+    wheel.x_root = import_picker.winfo_rootx()
+    wheel.y_root = import_picker.winfo_rooty()
+    app._dispatch_page_mousewheel(wheel)
+    if import_scroll.canvas.yview() != before_scroll:
+        raise RuntimeError("dropdown wheel scrolled the underlying import page")
+    import_scroll.canvas.configure(scrollregion=(0, 0, 1000, 3000))
+    import_scroll.canvas.yview_moveto(0.5)
+    app.update_idletasks()
+    if ".popdown" in str(app.tk.call("grab", "current", app)):
+        raise RuntimeError("page scroll left a detached dropdown open")
     print(
         "ui_smoke_ok",
         f"events={len(repository.inventory_events)}",

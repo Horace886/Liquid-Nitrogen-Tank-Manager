@@ -2764,7 +2764,8 @@ class ScrollableFrame(ttk.Frame):
         self.horizontal_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview, style="Flat.Horizontal.TScrollbar")
         self.body = ttk.Frame(self.canvas, style="Page.TFrame")
         self._window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set, xscrollcommand=self.horizontal_scrollbar.set)
+        self._last_scroll_top = None
+        self.canvas.configure(yscrollcommand=self._set_vertical_scroll, xscrollcommand=self.horizontal_scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self._scrollbar_visible = False
         self._horizontal_scrollbar_visible = False
@@ -2774,6 +2775,18 @@ class ScrollableFrame(ttk.Frame):
         register = getattr(toplevel, "_register_scrollable_frame", None)
         if callable(register):
             register(self)
+
+    def _set_vertical_scroll(self, first: str, last: str) -> None:
+        self.scrollbar.set(first, last)
+        top = float(first)
+        if self._last_scroll_top is not None and top != self._last_scroll_top:
+            # A native combobox popup is a separate window and cannot follow a scrolled page.
+            grabbed = str(self.tk.call("grab", "current", self))
+            if ".popdown" in grabbed:
+                owner = grabbed.split(".popdown", 1)[0]
+                if owner.startswith(str(self) + "."):
+                    self.tk.call("ttk::combobox::Unpost", owner)
+        self._last_scroll_top = top
 
     def _sync_scroll_region(self, _event: tk.Event) -> None:
         self._sync_window_width()
@@ -3032,6 +3045,9 @@ class FreezerManagerApp(tk.Tk):
 
     def _dispatch_page_mousewheel(self, event: tk.Event) -> str | None:
         """Route the wheel to the visible scroll page under the pointer."""
+        # Native dropdowns own their wheel events; do not scroll the page beneath them.
+        if ".popdown" in str(self.tk.call("grab", "current", self)):
+            return None
         if self._on_box_grid_vertical_scroll(event) == "break":
             return "break"
         active: list[ScrollableFrame] = []
@@ -6628,9 +6644,49 @@ class FreezerManagerApp(tk.Tk):
 
         summary_panel = self._panel(page)
         summary_panel.pack(fill="x", pady=(0, 14))
-        ui.Label(summary_panel, text=msg('将要处理的液氮罐'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
+        ui.Label(summary_panel, text=msg('导入后的冻存盒内孔位布局'), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
+        ui.Label(summary_panel, text=msg('设置每个冻存盒内部的孔位行列，不是液氮罐的列数和层数。统一布局包含该罐空盒。'), bg=COLORS["panel"], fg=COLORS["muted"], font=("Microsoft YaHei UI", 9), wraplength=620, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+        self.import_layout_vars = {}
         for name, records in preview.freezers:
-            ui.Label(summary_panel, text=msg('• {0}  ·  {1} 条占用记录', name, len(records)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9)).pack(anchor="w", padx=20, pady=3)
+            tank_card = self._panel(summary_panel)
+            tank_card.pack(fill="x", padx=18, pady=(3, 10))
+            ui.Label(tank_card, text=msg('• {0}  ·  {1} 条占用记录', name, len(records)), bg=COLORS["panel"], fg=COLORS["text"], font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", padx=14, pady=(10, 6))
+            rows = columns = 9
+            for full_position in records:
+                if "/" in full_position:
+                    row, column = self.repository.parse_box_position(full_position.split("/", 1)[1])
+                    rows, columns = max(rows, row), max(columns, column)
+            matching_id = next((key for key, freezer in self.repository.freezers.items()
+                                if freezer.name.casefold() == name.strip()[:50].casefold()), None)
+            for (freezer_id, _code), layout in self.repository.box_layouts.items():
+                if freezer_id == matching_id:
+                    rows, columns = max(rows, layout.rows), max(columns, layout.columns)
+            enabled = tk.BooleanVar(value=True)
+            rows_var, columns_var = tk.StringVar(value=str(rows)), tk.StringVar(value=str(columns))
+            self.import_layout_vars[name] = (enabled, rows_var, columns_var)
+            mode_row = tk.Frame(tank_card, bg=COLORS["panel"])
+            mode_row.pack(fill="x", padx=14, pady=(0, 8))
+            ui.Label(mode_row, text=msg('应用方式'), bg=COLORS["panel"], fg=COLORS["muted"]).pack(side="left", padx=(0, 10))
+            modes = (msg('全罐冻存盒统一布局（默认）'), msg('按各盒样品位置推算'))
+            mode_var = tk.StringVar(value=str(modes[0]))
+            mode_picker = ui.Combobox(mode_row, textvariable=mode_var, values=modes, state="readonly", width=30, style="Picker.TCombobox")
+            mode_picker.pack(side="left")
+            _style_dimension_dropdown(mode_picker)
+            options_row = tk.Frame(tank_card, bg=COLORS["panel"])
+            options_row.pack(fill="x", padx=14, pady=(0, 12))
+            size_pickers = []
+            for label, variable in ((msg('盒内行数（A、B…）'), rows_var), (msg('盒内列数（1、2…）'), columns_var)):
+                ui.Label(options_row, text=label, bg=COLORS["panel"], fg=COLORS["text"]).pack(side="left", padx=(0, 6))
+                picker = ui.Combobox(options_row, textvariable=variable, values=tuple(str(i) for i in range(1, 21)),
+                                     state="readonly", width=5, style="Picker.TCombobox", justify="center")
+                picker.pack(side="left", padx=(0, 14))
+                _style_dimension_dropdown(picker)
+                size_pickers.append(picker)
+            def change_mode(_event, choice=mode_var, flag=enabled, controls=size_pickers, uniform=str(modes[0])):
+                flag.set(choice.get() == uniform)
+                for control in controls:
+                    control.configure(state="readonly" if flag.get() else "disabled")
+            mode_picker.bind("<<ComboboxSelected>>", change_mode)
         tk.Frame(summary_panel, height=8, bg=COLORS["panel"]).pack()
 
         issue_panel = self._panel(page)
@@ -6681,6 +6737,21 @@ class FreezerManagerApp(tk.Tk):
             return
         imported = preview.freezers
 
+        uniform_layouts = {
+            name: (int(rows.get()), int(columns.get()))
+            for name, (enabled, rows, columns) in self.import_layout_vars.items() if enabled.get()
+        }
+        for name, records in imported:
+            if name not in uniform_layouts:
+                continue
+            rows, columns = uniform_layouts[name]
+            for full_position in records:
+                if "/" in full_position:
+                    row, column = self.repository.parse_box_position(full_position.split("/", 1)[1])
+                    if row > rows or column > columns:
+                        self._notify(msg('导入失败'), msg('{0} 的 {1} 超出所选 {2}×{3} 规格，请调整行数或列数。', name, full_position, rows, columns), danger=True)
+                        return
+
         record_count = sum(len(records) for _name, records in imported)
         mode = self._choose_import_mode(len(imported), record_count)
         if mode is None:
@@ -6689,6 +6760,7 @@ class FreezerManagerApp(tk.Tk):
             stats = self.repository.import_freezers(
                 imported,
                 overwrite=mode == "overwrite",
+                uniform_layouts=uniform_layouts,
             )
         except (OSError, ValueError) as exc:
             self._notify(msg('导入失败'), msg('无法写入本地数据：\n{0}', exc), danger=True)

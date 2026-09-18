@@ -1115,6 +1115,7 @@ class FreezerRepository:
         imported: list[tuple[str, dict[str, dict[str, str]]]],
         *,
         overwrite: bool,
+        uniform_layouts: dict[str, tuple[int, int]] | None = None,
     ) -> dict[str, int]:
         previous = copy.deepcopy(self.freezers)
         previous_layouts = copy.deepcopy(self.box_layouts)
@@ -1203,6 +1204,18 @@ class FreezerRepository:
                 if created_freezer:
                     target.storage_columns = max(4, required_columns)
                     target.storage_layers = max(5, required_layers)
+                if uniform_layouts and raw_name in uniform_layouts:
+                    rows, columns = uniform_layouts[raw_name]
+                    if not (1 <= rows <= 20 and 1 <= columns <= 20):
+                        raise ValueError("盒子布局的行数和列数需要在 1 到 20 之间。")
+                    for (stored_id, code, position), sample in self.box_samples.items():
+                        if stored_id != matching_id or not sample.occupied:
+                            continue
+                        row, column = self.parse_box_position(position)
+                        if row > rows or column > columns:
+                            raise ValueError(f"{name}: {code}/{position} 超出所选冻存盒规格 {rows}×{columns}。")
+                    for code in all_unit_codes(target.storage_columns, target.storage_layers):
+                        self.box_layouts[(matching_id, code)] = BoxLayout(rows, columns, f"细胞冻存盒 {code}")
                 record_count += converted_count
             self.save()
         except (OSError, ValueError):

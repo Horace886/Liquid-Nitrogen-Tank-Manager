@@ -140,6 +140,7 @@ Excel 兜底迁入不能完整保留：
 - 冻存盒总览在大规格下出现的横向和纵向滚动条使用一致的扁平样式。
 - 冻存盒总览的操作按钮不显示焦点蓝框；盒位蓝色描边仅表示已选中，取消选择后恢复原边框。
 - 所有面板、结果卡片及日历和筛选弹层获得焦点后保持原边框颜色，不再出现默认黑框。
+- 下拉列表展开时，滚轮不会同时滚动底层页面；页面滚动导致输入框位置变化时，自动收起该页面的下拉列表，避免错位悬浮。
 - “设置盒子布局”窗口使用等宽的大尺寸取消和确定按钮，便于点击。
 - 布局应用范围采用浅蓝色选中卡片，行列下拉列表使用统一的扁平滚动条。
 - 液氮罐规格的列数、层数下拉列表使用相同配色和扁平滚动条。孔位中的长细胞名按实际文字宽度显示省略号，保持孔位号与名称两行对齐；完整名称可打开孔位查看。
@@ -194,6 +195,10 @@ Excel 兜底迁入不能完整保留：
 | `LICENSE` | PolyForm Noncommercial 1.0.0 完整许可证 |
 
 ## 运行测试
+
+Excel 导入预览为每个液氮罐单独显示“冻存盒内孔位布局”卡片，默认选择“全罐冻存盒统一布局”，并根据导入位置和同名罐现有布局推荐尺寸。盒内行数（A、B…）与盒内列数（1、2…）均可选 1–20，区别于液氮罐的列数和层数。确认后应用到该罐全部盒位，包括空盒；切换为“按各盒样品位置推算”时停用尺寸选择。合并导入会同时校验保留的库存，若有样品超出所选规格，则整次导入取消，不留下部分修改。Excel 文件格式不变。
+
+库存 Excel 导出的“列”和“层”支持第 1–20 层，例如盒位 `610` 对应第 6 列、第 10 层；记录按列、层的数值顺序排列。已导出的旧文件需重新导出才能更新。
 
 在项目目录的 PowerShell 中运行：
 
@@ -387,6 +392,7 @@ Excel is therefore suitable for recovering the essential **cell name → tank �
 - Cryobox zoom, fit-to-window, layout, and in-box batch action controls use background highlighting instead of an additional focus outline.
 - Overview actions do not show focus outlines. Blue box borders indicate selection only and disappear when deselected.
 - Panels, result cards, calendar popups and filter popups retain their border colors on focus without a default black outline.
+- Open dropdowns do not scroll the underlying page with the wheel. Scrolling the page closes its dropdown to prevent a detached popup.
 - The cryobox layout dialog uses larger, equally sized Cancel and Confirm buttons.
 - Layout scope uses pale-blue selected cards, and row/column lists use flat scrollbars matching the application.
 - Tank dimension dropdowns use the same colors and flat scrollbars. Long cell names are ellipsized to fit the available width, keeping position and name on two lines; open the position to view the full name.
@@ -437,6 +443,10 @@ When importing Excel files:
 | `LICENSE` | Full PolyForm Noncommercial 1.0.0 license |
 
 ## Running Tests
+
+Excel import preview shows a separate cryobox layout card for each tank. Uniform layout is selected by default, with sizes suggested from incoming positions and existing layouts. Box rows (A, B...) and columns (1, 2...) range from 1–20 and are distinct from tank columns and levels. The layout includes empty boxes. Selecting per-box inference disables the size controls. Merge also validates retained inventory; any out-of-range sample rejects the entire import without partial changes. The Excel format is unchanged.
+
+Inventory Excel exports support levels 1–20 in the Column and Level fields: box `610` is column 6, level 10. Records are sorted numerically by column and level. Re-export existing files to update these values.
 
 Run the following command in PowerShell from the project directory:
 

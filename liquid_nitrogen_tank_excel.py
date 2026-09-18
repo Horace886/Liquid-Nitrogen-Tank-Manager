@@ -572,8 +572,7 @@ def _tube_ledger_sheet(samples: Mapping[tuple[str, str], BoxSampleLike], languag
         key=lambda item: (*_tube_box_sort_key(item[0]), *_tube_position_sort_key(item[1])),
     )
     for row_number, (box_code, position, sample) in enumerate(sorted_samples, 2):
-        column = int(box_code[0]) if len(box_code) == 2 and box_code.isdigit() else 0
-        layer = int(box_code[1]) if len(box_code) == 2 and box_code.isdigit() else 0
+        column, layer = _parse_unit_code(box_code) or (0, 0)
         cells = [
             _text_cell(f"A{row_number}", box_code),
             _number_cell(f"B{row_number}", column),
@@ -611,10 +610,7 @@ def _tube_ledger_sheet(samples: Mapping[tuple[str, str], BoxSampleLike], languag
 
 
 def _tube_box_sort_key(code: str) -> tuple[int, int]:
-    return (
-        int(code[0]) if len(code) == 2 and code.isdigit() else 99,
-        int(code[1]) if len(code) == 2 and code.isdigit() else 99,
-    )
+    return _parse_unit_code(code) or (99, 99)
 
 
 def _tube_position_sort_key(position: str) -> tuple[int, int]:
