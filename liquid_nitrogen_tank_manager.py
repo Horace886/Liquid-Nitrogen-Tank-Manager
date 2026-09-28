@@ -2326,14 +2326,25 @@ class DatePickerField(tk.Frame):
         panel = self.panel
         self.panel = None
         try:
+            focused = panel.focus_displayof() if panel is not None else None
+            restore_focus = focused is not None and focused.winfo_toplevel() is panel
+        except tk.TclError:
+            restore_focus = False
+        try:
             root = self.winfo_toplevel()
             if getattr(root, "_active_date_picker", None) is self:
                 setattr(root, "_active_date_picker", None)
         except tk.TclError:
-            pass
+            restore_focus = False
         if panel is not None:
             try:
                 panel.destroy()
+            except tk.TclError:
+                pass
+        if restore_focus:
+            try:
+                root.focus_force()
+                self.entry.focus_set()
             except tk.TclError:
                 pass
 

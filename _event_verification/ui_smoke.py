@@ -592,6 +592,8 @@ with TemporaryDirectory() as folder:
     returned_dialog._close()
     app.update()
     repository.switch_freezer(first_freezer_id)
+    app.deiconify()
+    app.update()
     empty_dialog = BoxSampleDialog(
         app,
         "入库细胞 · 11/C1",
@@ -603,6 +605,32 @@ with TemporaryDirectory() as folder:
     empty_actions = {child._text for child in descendants(empty_dialog) if isinstance(child, RoundedButton)}
     if "确认入库" not in empty_actions:
         raise RuntimeError(f"single-position inbound action missing: {empty_actions}")
+    empty_dialog.grab_set()
+    empty_dialog.focus_force()
+    app.update()
+    inbound_picker = next(
+        child for child in descendants(empty_dialog) if isinstance(child, DatePickerField)
+    )
+    inbound_picker.open_calendar()
+    app.update()
+    close_button = next(
+        child for child in descendants(inbound_picker.panel)
+        if isinstance(child, ttk.Button) and child.cget("text") == "关闭"
+    )
+    close_button.focus_force()
+    app.update()
+    close_button.invoke()
+    app.update()
+    if inbound_picker.panel is not None or app.grab_current() is not empty_dialog:
+        raise RuntimeError("closing inbound calendar disrupted the modal dialog")
+    for key in ("sample_name", "sample_type", "stored_by"):
+        empty_dialog.entries[key].focus_set()
+        app.update_idletasks()
+        if app.focus_get() is not empty_dialog.entries[key]:
+            raise RuntimeError(
+                f"inbound {key} cannot regain keyboard focus after closing calendar: "
+                f"focus={app.focus_get()}, grab={app.grab_current()}"
+            )
     # Simulate Microsoft Pinyin owning the first Return while committing the
     # literal candidate "raw".  The first Return must only commit text; the
     # immediately following Return must submit without entering a window menu.
@@ -637,6 +665,7 @@ with TemporaryDirectory() as folder:
         raise RuntimeError(f"second Return did not submit committed IME text: {empty_dialog.result}")
     if empty_dialog.winfo_exists():
         empty_dialog.destroy()
+    app.withdraw()
     occupied_dialog = BoxSampleDialog(
         app,
         "编辑细胞 · 11/B1",
